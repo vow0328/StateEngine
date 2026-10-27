@@ -1,0 +1,22 @@
+# 编译产物
+*.exe
+*.pdb
+*.ilk
+*.obj
+*.o
+*.d
+*.map
+*.elf
+*.bin
+*.hex
+state_demo
+a.out
+
+# IDE / 本地配置
+.vscode/
+.idea/
+.claude/
+
+# 操作系统
+Thumbs.db
+.DS_Store

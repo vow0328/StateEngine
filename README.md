@@ -1,6 +1,6 @@
 # MainStat 表驱动状态迁移引擎
 
-`MainStat.c` / `MainStat.h` 是表驱动状态迁移引擎本体。本仓库只保留引擎核心和最小移植模板；完整交互式井字棋例程已单独打包为 `StateEngine_Example.zip`，可放到 GitHub Release。
+`MainStat.c` / `MainStat.h` 是表驱动状态迁移引擎本体。本仓库包含引擎核心、最小移植模板和完整交互式井字棋例程；例程源码在 `StateEngine_Example/` 目录，不压缩入库。
 
 ## 文件
 
@@ -8,9 +8,11 @@
 |---|---|
 | `MainStat.c` / `MainStat.h` | **引擎本体**：迁移循环、触发器匹配、状态历史栈、特殊迁移目标、临界区占位。 |
 | `TypeDefine_Sample.h` | 最小类型与通用标志模板：`UI_8` / `UI_16` / `BOOL`、`TRUE/FALSE/OK/NG/YES/NO/PUBLIC`、`PT_SCRN_DUMMY`。实机替换为项目公共类型头。 |
-| `StateEngine_Example.zip` | 完整交互式井字棋例程源码包，包含 Action/Screen 分层、双人/人机对战。 |
+| [`StateEngine_Example/`](StateEngine_Example/) | 完整交互式井字棋例程源码，包含 Action/Screen 分层、双人/人机对战。 |
 
 `MainStat.c` / `MainStat.h` 是引擎代码；`TypeDefine_Sample.h` 只是让本仓库能独立编译、并作为移植示例，不属于引擎通用部分。
+
+`StateEngine_Example/` 是独立可编译的例程，内含一份 `MainStat.c/.h` 副本；根目录的 `MainStat.c/.h` 是当前核心版本。例程用于演示接入方式，两者如有差异以根目录核心为准。
 
 ## 独立编译检查
 
@@ -58,4 +60,4 @@ gcc -std=c99 -Wall -Wextra -pedantic -c MainStat.c
 
 ## 完整例程
 
-交互式井字棋例程（双人对战 / 人机对战）演示菜单跳转、自动迁移、状态回退、画面渲染和状态栈行为。该例程的完整源码单独打包在仓库根目录的 `StateEngine_Example.zip` 中，不在核心源码目录展开；也可以作为 GitHub Release 附件上传。
+交互式井字棋例程（双人对战 / 人机对战）演示菜单跳转、自动迁移、状态回退、画面渲染和状态栈行为。完整源码在仓库根目录的 [`StateEngine_Example/`](StateEngine_Example/) 目录中，编译与运行方式见该目录的 README。需要单文件分发包时，可从该目录生成 zip 挂到 GitHub Release，不把压缩包提交进 Git。
