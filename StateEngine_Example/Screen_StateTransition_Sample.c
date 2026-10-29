@@ -47,13 +47,13 @@ UI_16 TttScreenReadTrigger(void)
         switch (code)
         {
         case 72:
-            return KC_UP;
+            return KEY_UP;
         case 80:
-            return KC_DOWN;
+            return KEY_DOWN;
         case 75:
-            return KC_LEFT;
+            return KEY_LEFT;
         case 77:
-            return KC_RIGHT;
+            return KEY_RIGHT;
         default:
             return SCREEN_KEY_NONE;
         }
@@ -63,27 +63,27 @@ UI_16 TttScreenReadTrigger(void)
     {
     case 'w':
     case 'W':
-        return KC_UP;
+        return KEY_UP;
 
     case 's':
     case 'S':
-        return KC_DOWN;
+        return KEY_DOWN;
 
     case 'a':
     case 'A':
-        return KC_LEFT;
+        return KEY_LEFT;
 
     case 'd':
     case 'D':
-        return KC_RIGHT;
+        return KEY_RIGHT;
 
     case ' ':
     case 10:
     case 13:
-        return KC_ENTER;
+        return KEY_ENTER;
 
     case 27:
-        return KC_ESC;
+        return KEY_ESC;
 
     case 'q':
     case 'Q':
@@ -105,27 +105,27 @@ UI_16 TttScreenReadTrigger(void)
     {
     case 'w':
     case 'W':
-        return KC_UP;
+        return KEY_UP;
 
     case 's':
     case 'S':
-        return KC_DOWN;
+        return KEY_DOWN;
 
     case 'a':
     case 'A':
-        return KC_LEFT;
+        return KEY_LEFT;
 
     case 'd':
     case 'D':
-        return KC_RIGHT;
+        return KEY_RIGHT;
 
     case ' ':
     case '\n':
     case '\r':
-        return KC_ENTER;
+        return KEY_ENTER;
 
     case 27:
-        return KC_ESC;
+        return KEY_ESC;
 
     case 'q':
     case 'Q':
@@ -228,35 +228,35 @@ void TttRenderCurrentScreen(void)
 
     /* 自动迁移状态在引擎内部执行完，不会成为最终状态；
        这里只处理实际画面 ID。 */
-    switch (GetStateTbl()->scrnId)
+    switch (STATE_CURRENT()->screenId)
     {
-    case SCRN_TTT_MENU:
+    case SCREEN_TTT_MENU:
         TttRenderMenu();
         break;
 
-    case SCRN_TTT_XTURN:
-    case SCRN_TTT_OTURN:
+    case SCREEN_TTT_XTURN:
+    case SCREEN_TTT_OTURN:
         TttRenderGame();
         break;
 
-    case SCRN_TTT_XWIN:
+    case SCREEN_TTT_XWIN:
         TttRenderResult((TttGetMode() == TTT_MODE_CPU) ? "你赢了！" : "X 获胜！");
         break;
 
-    case SCRN_TTT_OWIN:
+    case SCREEN_TTT_OWIN:
         TttRenderResult((TttGetMode() == TTT_MODE_CPU) ? "电脑获胜！" : "O 获胜！");
         break;
 
-    case SCRN_TTT_DRAW:
+    case SCREEN_TTT_DRAW:
         TttRenderResult("平局。");
         break;
 
-    case SCRN_TTT_QUIT:
+    case SCREEN_TTT_QUIT:
         printf("  谢谢游玩。\n");
         break;
 
     default:
-        printf("  [未知画面 %u]\n", (unsigned int)GetStateTbl()->scrnId);
+        printf("  [未知画面 %u]\n", (unsigned int)STATE_CURRENT()->screenId);
         break;
     }
 

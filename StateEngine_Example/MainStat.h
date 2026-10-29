@@ -7,63 +7,75 @@
  * 1. 数据结构
  *=========================================================*/
 
-/* 最大最小值触发器范围（范围触发器的查找表条目） */
-typedef struct MinToMaxTrig_T
+/* 触发器范围：范围触发器在对照表中的最小/最大触发值 */
+typedef struct TriggerRange_t
 {
     UI_16 min;
     UI_16 max;
-} MinToMaxTrig_T;
+} TriggerRange_t;
 
-typedef UI_16 FUNC(UI_16); /* 関数指針型 */
+/* 回调类型：入参为触发值，返回下一轮触发值 */
+typedef UI_16 FUNC(UI_16);
 
+/* 状态类型前置声明 */
 typedef struct StateType_t StateType_t;
 
-/* 状態遷移表末端部分（遷移条目） */
-typedef struct StateTableParts_t
+/* 单条迁移规则 */
+typedef struct StateTable_t
 {
-    UI_16 trig;                    /* 遷移条件（触発値或範囲） */
-    FUNC /*const*/ *atFuncPtr;     /* 退状態処理関数指針 */
-    const StateType_t *nextTblPtr; /* 次の状態指針 */
-} StateTableParts_t;
+    UI_16 trigger;                /* 触发值；范围触发器时为范围基值 */
+    FUNC *afFuncPtr;              /* 退出状态时处理函数 */
+    const StateType_t *nextState; /* 迁移目标状态 */
+} StateTable_t;
 
-/* 状態遷移表（一个状态） */
+/* 状态迁移表 */
 struct StateType_t
 {
-    FUNC /*const*/ *bfFuncPtr;       /* 入状態処理関数指針 */
-    UI_8 reqFlg : 2;                 /* 自動遷移号（1=継続循環、0=停止） */
-    UI_8 trTrigNum : 6;              /* 遷移テーブル条目数（最大63） */
-    const StateTableParts_t *pR_Tbl; /* 後半テーブル指針 */
-    UI_16 scrnId;                    /* スクリーンID */
+    FUNC *bfFuncPtr;              /* 进入状态时执行 */
+    UI_8 autoFlg : 2;             /* bit0=1 表示自动迁移 */
+    UI_8 transitionCount : 6;     /* 迁移规则数量，最大 63 */
+    const StateTable_t *atTable;  /* 迁移规则表 */
+    UI_16 screenId;               /* 画面 ID */
 };
 
-/* 引擎全局状态 */
-struct StateInfoType
+/* 引擎上下文 */
+typedef struct StateInfo
 {
-    UI_16 trig;                /* 当前触发器 */
-    const StateType_t *tblPtr; /* 当前状态指针 */
-};
-typedef struct StateInfoType StateInfoType_t;
+    UI_16 trigger;                /* 当前触发值 */
+    const StateType_t *state;     /* 当前状态 */
+} StateInfo;
+
+/* 状态历史栈 */
+#define STATE_HISTORY_DEPTH 25u
+#define STATE_HISTORY_NOT_FOUND ((UI_8)0xFFu) /* 历史中未找到 */
+
+typedef struct StateHistory_t
+{
+    const StateType_t *states[STATE_HISTORY_DEPTH]; /* 状态历史 */
+    UI_8 stackTop;                                  /* 有效条目数；栈顶下标为 stackTop - 1 */
+} StateHistory_t;
 
 /*=========================================================
  * 2. 全局实例
  *=========================================================*/
-extern StateInfoType_t stateInfo;
+extern StateInfo stateInfo;
+extern StateHistory_t stateStack;
 
 /*=========================================================
  * 3. 状态描述宏
  *=========================================================*/
-#define SetStateTrig(t) (stateInfo.trig = (UI_16)(t))
-#define GetStateTrig() ((UI_16)stateInfo.trig)
-#define GetStateTbl() (stateInfo.tblPtr)
-#define ListOf(tbl) (UI_8)(sizeof(tbl) / sizeof((tbl)[0])), (tbl)
+#define STATESETTRIGGER(t) (stateInfo.trigger = (UI_16)(t))
+#define STATE_GET_TRIGGER() ((UI_16)stateInfo.trigger)
+#define STATE_CURRENT() (stateInfo.state)
+#define STATE_RULES(tbl) (UI_8)(sizeof(tbl) / sizeof((tbl)[0])), (tbl)
 
 /*=========================================================
- * 4. 状态迁移引擎接口
+ * 4. 引擎接口
  *=========================================================*/
-void MainStateEngineInit(const StateType_t *initialState);
-void MainStateEngine(UI_16 keycode);
-void MainStateEngineRecovery(void);
+void StateEngineInit(const StateType_t *initialState);
+void StateEngine(UI_16 keyCode);
+void StateEngineRecovery(void);
 
-BOOL GetTrigTbl(const StateTableParts_t **pTbl, UI_8 *pTrigNum, UI_16 *pOrgTrig);
+BOOL StateFindTable(const StateTable_t **pRule, UI_8 *pRuleCount, UI_16 *pTrigger);
 
 #endif /* MAIN_STAT_H */

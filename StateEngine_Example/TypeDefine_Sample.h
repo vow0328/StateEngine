@@ -10,7 +10,7 @@
  * 实机工程中通常由已有的公共类型头文件代替。
  *=========================================================*/
 
-/* 基础类型：教学例程中用标准 C 类型代替原工程类型定义 */
+/* 基础类型：教学例程中用标准 C 类型代替实际工程类型定义 */
 typedef uint8_t UI_8;
 typedef uint16_t UI_16;
 typedef int BOOL;
@@ -39,8 +39,8 @@ typedef int BOOL;
 #endif
 
 /* 无有效画面的占位屏幕 ID */
-#ifndef PT_SCRN_DUMMY
-#define PT_SCRN_DUMMY 0u
+#ifndef SCREEN_ID_NONE
+#define SCREEN_ID_NONE 0u
 #endif
 
 #endif /* TYPE_DEFINE_SAMPLE_H */

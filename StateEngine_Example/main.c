@@ -6,7 +6,7 @@
 /*=========================================================
  * 交互式井字棋主循环
  *
- * 读键 -> 交给状态引擎迁移 -> 引擎返回后按 scrnId 渲染。
+ * 读键 -> 交给状态引擎迁移 -> 引擎返回后按 screenId 渲染。
  * 引擎负责状态表和状态栈；Screen 层只负责输入与显示。
  *=========================================================*/
 
@@ -15,7 +15,7 @@ int main(void)
     UI_16 key;
 
     TttScreenInit();
-    MainStateEngineInit(&TblTttMenu);
+    StateEngineInit(&StateTttMenu);
     TttRenderCurrentScreen();
 
     for (;;)
@@ -33,11 +33,11 @@ int main(void)
             continue;
         }
 
-        MainStateEngine(key);
+        StateEngine(key);
         TttRenderCurrentScreen();
 
         /* 菜单选择“退出”后进入终止状态 */
-        if (GetStateTbl() == &TblTttQuit)
+        if (STATE_CURRENT() == &StateTttQuit)
         {
             break;
         }

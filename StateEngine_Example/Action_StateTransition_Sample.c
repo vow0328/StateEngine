@@ -11,7 +11,7 @@
  * X_WIN / O_WIN / DRAW --Enter--> RESULT_DECIDE --自动--> X_TURN / MENU
  * 任意游戏画面 --Esc--> MENU
  *
- * 入口回调只更新数据，主循环在引擎返回后按 scrnId 渲染。
+ * 入口回调只更新数据，主循环在引擎返回后按 screenId 渲染。
  *=========================================================*/
 
 #define TTT_EMPTY  ((char)0)
@@ -172,29 +172,29 @@ static UI_8 TttChooseComputerCell(void)
  *=========================================================*/
 
 /* 空处理：入口和迁移动作共用 */
-static UI_16 DummyFunc(UI_16 trig)
+static UI_16 TttNoop(UI_16 trigger)
 {
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttXTurnEntry(UI_16 trig)
+static UI_16 TttXTurnEntry(UI_16 trigger)
 {
     g_currentMover = TTT_MARK_X;
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttOTurnEntry(UI_16 trig)
+static UI_16 TttOTurnEntry(UI_16 trigger)
 {
     g_currentMover = TTT_MARK_O;
-    return trig;
+    return trigger;
 }
 
 /* 自动迁移状态：电脑执 O，落子后交给 CHECK 继续判定 */
-static UI_16 TttComputerTurnEntry(UI_16 trig)
+static UI_16 TttComputerTurnEntry(UI_16 trigger)
 {
     UI_8 cell;
 
-    (void)trig;
+    (void)trigger;
     g_currentMover = TTT_MARK_O;
     cell = TttChooseComputerCell();
 
@@ -209,9 +209,9 @@ static UI_16 TttComputerTurnEntry(UI_16 trig)
 }
 
 /* 自动迁移状态：检查胜负并生成下一轮触发器 */
-static UI_16 TttCheckEntry(UI_16 trig)
+static UI_16 TttCheckEntry(UI_16 trigger)
 {
-    (void)trig;
+    (void)trigger;
 
     if (TttHasLine(TTT_MARK_X) != FALSE)
     {
@@ -256,9 +256,9 @@ static UI_16 TttCheckEntry(UI_16 trig)
     return TRIG_TTT_TO_X;
 }
 
-static UI_16 TttMenuDecideEntry(UI_16 trig)
+static UI_16 TttMenuDecideEntry(UI_16 trigger)
 {
-    (void)trig;
+    (void)trigger;
 
     if (g_menuSel == TTT_MENU_2P)
     {
@@ -273,320 +273,320 @@ static UI_16 TttMenuDecideEntry(UI_16 trig)
     return TRIG_TTT_QUIT;
 }
 
-static UI_16 TttResultDecideEntry(UI_16 trig)
+static UI_16 TttResultDecideEntry(UI_16 trigger)
 {
-    (void)trig;
+    (void)trigger;
     return (g_resultSel == TTT_RESULT_REPLAY) ? TRIG_TTT_REPLAY : TRIG_TTT_MENU;
 }
 
 /*=========================================================
- * 迁移/退状态处理函数（atFuncPtr）
+ * 迁移/退状态处理函数（afFuncPtr）
  *=========================================================*/
 
-static UI_16 TttMenuUpAction(UI_16 trig)
+static UI_16 TttMenuUpAction(UI_16 trigger)
 {
     if (g_menuSel > TTT_MENU_2P)
     {
         g_menuSel--;
     }
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttMenuDownAction(UI_16 trig)
+static UI_16 TttMenuDownAction(UI_16 trigger)
 {
     if (g_menuSel < TTT_MENU_QUIT)
     {
         g_menuSel++;
     }
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttResultUpAction(UI_16 trig)
+static UI_16 TttResultUpAction(UI_16 trigger)
 {
     if (g_resultSel > TTT_RESULT_REPLAY)
     {
         g_resultSel--;
     }
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttResultDownAction(UI_16 trig)
+static UI_16 TttResultDownAction(UI_16 trigger)
 {
     if (g_resultSel < TTT_RESULT_MENU)
     {
         g_resultSel++;
     }
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttMoveUpAction(UI_16 trig)
+static UI_16 TttMoveUpAction(UI_16 trigger)
 {
     if (g_cursor >= 3u)
     {
         g_cursor = (UI_8)(g_cursor - 3u);
     }
     g_notice = 0;
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttMoveDownAction(UI_16 trig)
+static UI_16 TttMoveDownAction(UI_16 trigger)
 {
     if (g_cursor <= 5u)
     {
         g_cursor = (UI_8)(g_cursor + 3u);
     }
     g_notice = 0;
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttMoveLeftAction(UI_16 trig)
+static UI_16 TttMoveLeftAction(UI_16 trigger)
 {
     if ((g_cursor % 3u) != 0u)
     {
         g_cursor--;
     }
     g_notice = 0;
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttMoveRightAction(UI_16 trig)
+static UI_16 TttMoveRightAction(UI_16 trigger)
 {
     if ((g_cursor % 3u) != 2u)
     {
         g_cursor++;
     }
     g_notice = 0;
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttPlaceXAction(UI_16 trig)
+static UI_16 TttPlaceXAction(UI_16 trigger)
 {
     (void)TttPlaceMark(TTT_MARK_X, g_cursor);
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttPlaceOAction(UI_16 trig)
+static UI_16 TttPlaceOAction(UI_16 trigger)
 {
     (void)TttPlaceMark(TTT_MARK_O, g_cursor);
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttNewGameAction(UI_16 trig)
+static UI_16 TttNewGameAction(UI_16 trigger)
 {
     TttResetBoard();
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttStart2PAction(UI_16 trig)
+static UI_16 TttStart2PAction(UI_16 trigger)
 {
     g_gameMode = TTT_MODE_2P;
     TttResetBoard();
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttStartCpuAction(UI_16 trig)
+static UI_16 TttStartCpuAction(UI_16 trigger)
 {
     g_gameMode = TTT_MODE_CPU;
     TttResetBoard();
-    return trig;
+    return trigger;
 }
 
-static UI_16 TttBackAction(UI_16 trig)
+static UI_16 TttBackAction(UI_16 trigger)
 {
     g_menuSel = (g_gameMode == TTT_MODE_CPU) ? TTT_MENU_CPU : TTT_MENU_2P;
     g_notice = 0;
-    return trig;
+    return trigger;
 }
 
 /*=========================================================
  * 状态迁移表与状态对象
  *
  * 每个状态表后紧跟对应的 StateType_t，便于对照阅读。
- * 自动迁移状态是过渡态，不对应实际画面，scrnId 使用 PT_SCRN_DUMMY。
+ * 自动迁移状态是过渡态，不对应实际画面，screenId 使用 SCREEN_ID_NONE。
  *=========================================================*/
 
 /* 主菜单 */
-static const StateTableParts_t TblTttMenuParts[] =
+static const StateTable_t TttMenuRules[] =
 {
-    { KC_UP,    TttMenuUpAction,   &TblTttMenu },
-    { KC_DOWN,  TttMenuDownAction, &TblTttMenu },
-    { KC_ENTER, DummyFunc,         &TblTttMenuDecide },
+    { KEY_UP,    TttMenuUpAction,   &StateTttMenu },
+    { KEY_DOWN,  TttMenuDownAction, &StateTttMenu },
+    { KEY_ENTER, TttNoop,         &StateTttMenuDecide },
 };
 
-PUBLIC const StateType_t TblTttMenu =
+PUBLIC const StateType_t StateTttMenu =
 {
-    DummyFunc,
+    TttNoop,
     NO,
-    ListOf(TblTttMenuParts),
-    SCRN_TTT_MENU
+    STATE_RULES(TttMenuRules),
+    SCREEN_TTT_MENU
 };
 
 /* 菜单确认：把选中项翻译成启动/退出触发器 */
-static const StateTableParts_t TblTttMenuDecideParts[] =
+static const StateTable_t TttMenuDecideRules[] =
 {
-    { TRIG_TTT_START_2P,  TttStart2PAction,  &TblTttXTurn },
-    { TRIG_TTT_START_CPU, TttStartCpuAction, &TblTttXTurn },
-    { TRIG_TTT_QUIT,      DummyFunc,         &TblTttQuit },
+    { TRIG_TTT_START_2P,  TttStart2PAction,  &StateTttXTurn },
+    { TRIG_TTT_START_CPU, TttStartCpuAction, &StateTttXTurn },
+    { TRIG_TTT_QUIT,      TttNoop,         &StateTttQuit },
 };
 
-PUBLIC const StateType_t TblTttMenuDecide =
+PUBLIC const StateType_t StateTttMenuDecide =
 {
     TttMenuDecideEntry,
     YES,
-    ListOf(TblTttMenuDecideParts),
-    PT_SCRN_DUMMY
+    STATE_RULES(TttMenuDecideRules),
+    SCREEN_ID_NONE
 };
 
 /* X 回合 */
-static const StateTableParts_t TblTttXTurnParts[] =
+static const StateTable_t TttXTurnRules[] =
 {
-    { KC_UP,    TttMoveUpAction,    &TblTttXTurn },
-    { KC_DOWN,  TttMoveDownAction,  &TblTttXTurn },
-    { KC_LEFT,  TttMoveLeftAction,  &TblTttXTurn },
-    { KC_RIGHT, TttMoveRightAction, &TblTttXTurn },
-    { KC_ENTER, TttPlaceXAction,    &TblTttCheck },
-    { KC_ESC,   TttBackAction,      &TblTttMenu },
+    { KEY_UP,    TttMoveUpAction,    &StateTttXTurn },
+    { KEY_DOWN,  TttMoveDownAction,  &StateTttXTurn },
+    { KEY_LEFT,  TttMoveLeftAction,  &StateTttXTurn },
+    { KEY_RIGHT, TttMoveRightAction, &StateTttXTurn },
+    { KEY_ENTER, TttPlaceXAction,    &StateTttCheck },
+    { KEY_ESC,   TttBackAction,      &StateTttMenu },
 };
 
-PUBLIC const StateType_t TblTttXTurn =
+PUBLIC const StateType_t StateTttXTurn =
 {
     TttXTurnEntry,
     NO,
-    ListOf(TblTttXTurnParts),
-    SCRN_TTT_XTURN
+    STATE_RULES(TttXTurnRules),
+    SCREEN_TTT_XTURN
 };
 
 /* O 回合 */
-static const StateTableParts_t TblTttOTurnParts[] =
+static const StateTable_t TttOTurnRules[] =
 {
-    { KC_UP,    TttMoveUpAction,    &TblTttOTurn },
-    { KC_DOWN,  TttMoveDownAction,  &TblTttOTurn },
-    { KC_LEFT,  TttMoveLeftAction,  &TblTttOTurn },
-    { KC_RIGHT, TttMoveRightAction, &TblTttOTurn },
-    { KC_ENTER, TttPlaceOAction,    &TblTttCheck },
-    { KC_ESC,   TttBackAction,      &TblTttMenu },
+    { KEY_UP,    TttMoveUpAction,    &StateTttOTurn },
+    { KEY_DOWN,  TttMoveDownAction,  &StateTttOTurn },
+    { KEY_LEFT,  TttMoveLeftAction,  &StateTttOTurn },
+    { KEY_RIGHT, TttMoveRightAction, &StateTttOTurn },
+    { KEY_ENTER, TttPlaceOAction,    &StateTttCheck },
+    { KEY_ESC,   TttBackAction,      &StateTttMenu },
 };
 
-PUBLIC const StateType_t TblTttOTurn =
+PUBLIC const StateType_t StateTttOTurn =
 {
     TttOTurnEntry,
     NO,
-    ListOf(TblTttOTurnParts),
-    SCRN_TTT_OTURN
+    STATE_RULES(TttOTurnRules),
+    SCREEN_TTT_OTURN
 };
 
 /* 胜负检查：入口函数返回的触发器驱动引擎继续自动迁移 */
-static const StateTableParts_t TblTttCheckParts[] =
+static const StateTable_t TttCheckRules[] =
 {
-    { TRIG_TTT_TO_X,   DummyFunc, &TblTttXTurn },
-    { TRIG_TTT_TO_O,   DummyFunc, &TblTttOTurn },
-    { TRIG_TTT_TO_CPU, DummyFunc, &TblTttComputerTurn },
-    { TRIG_TTT_X_WIN,  DummyFunc, &TblTttXWin },
-    { TRIG_TTT_O_WIN,  DummyFunc, &TblTttOWin },
-    { TRIG_TTT_DRAW,   DummyFunc, &TblTttDraw },
+    { TRIG_TTT_TO_X,   TttNoop, &StateTttXTurn },
+    { TRIG_TTT_TO_O,   TttNoop, &StateTttOTurn },
+    { TRIG_TTT_TO_CPU, TttNoop, &StateTttComputerTurn },
+    { TRIG_TTT_X_WIN,  TttNoop, &StateTttXWin },
+    { TRIG_TTT_O_WIN,  TttNoop, &StateTttOWin },
+    { TRIG_TTT_DRAW,   TttNoop, &StateTttDraw },
 };
 
-PUBLIC const StateType_t TblTttCheck =
+PUBLIC const StateType_t StateTttCheck =
 {
     TttCheckEntry,
     YES,
-    ListOf(TblTttCheckParts),
-    PT_SCRN_DUMMY
+    STATE_RULES(TttCheckRules),
+    SCREEN_ID_NONE
 };
 
 /* 电脑回合：落子后回到 CHECK 继续判定 */
-static const StateTableParts_t TblTttComputerTurnParts[] =
+static const StateTable_t TttComputerTurnRules[] =
 {
-    { TRIG_TTT_COMPUTER_DONE, DummyFunc, &TblTttCheck },
-    { TRIG_TTT_DRAW,          DummyFunc, &TblTttDraw },
+    { TRIG_TTT_COMPUTER_DONE, TttNoop, &StateTttCheck },
+    { TRIG_TTT_DRAW,          TttNoop, &StateTttDraw },
 };
 
-PUBLIC const StateType_t TblTttComputerTurn =
+PUBLIC const StateType_t StateTttComputerTurn =
 {
     TttComputerTurnEntry,
     YES,
-    ListOf(TblTttComputerTurnParts),
-    PT_SCRN_DUMMY
+    STATE_RULES(TttComputerTurnRules),
+    SCREEN_ID_NONE
 };
 
 /* X 获胜 */
-static const StateTableParts_t TblTttXWinParts[] =
+static const StateTable_t TttXWinRules[] =
 {
-    { KC_UP,    TttResultUpAction,   &TblTttXWin },
-    { KC_DOWN,  TttResultDownAction, &TblTttXWin },
-    { KC_ENTER, DummyFunc,           &TblTttResultDecide },
-    { KC_ESC,   TttBackAction,       &TblTttMenu },
+    { KEY_UP,    TttResultUpAction,   &StateTttXWin },
+    { KEY_DOWN,  TttResultDownAction, &StateTttXWin },
+    { KEY_ENTER, TttNoop,           &StateTttResultDecide },
+    { KEY_ESC,   TttBackAction,       &StateTttMenu },
 };
 
-PUBLIC const StateType_t TblTttXWin =
+PUBLIC const StateType_t StateTttXWin =
 {
-    DummyFunc,
+    TttNoop,
     NO,
-    ListOf(TblTttXWinParts),
-    SCRN_TTT_XWIN
+    STATE_RULES(TttXWinRules),
+    SCREEN_TTT_XWIN
 };
 
 /* O 获胜 */
-static const StateTableParts_t TblTttOWinParts[] =
+static const StateTable_t TttOWinRules[] =
 {
-    { KC_UP,    TttResultUpAction,   &TblTttOWin },
-    { KC_DOWN,  TttResultDownAction, &TblTttOWin },
-    { KC_ENTER, DummyFunc,           &TblTttResultDecide },
-    { KC_ESC,   TttBackAction,       &TblTttMenu },
+    { KEY_UP,    TttResultUpAction,   &StateTttOWin },
+    { KEY_DOWN,  TttResultDownAction, &StateTttOWin },
+    { KEY_ENTER, TttNoop,           &StateTttResultDecide },
+    { KEY_ESC,   TttBackAction,       &StateTttMenu },
 };
 
-PUBLIC const StateType_t TblTttOWin =
+PUBLIC const StateType_t StateTttOWin =
 {
-    DummyFunc,
+    TttNoop,
     NO,
-    ListOf(TblTttOWinParts),
-    SCRN_TTT_OWIN
+    STATE_RULES(TttOWinRules),
+    SCREEN_TTT_OWIN
 };
 
 /* 平局 */
-static const StateTableParts_t TblTttDrawParts[] =
+static const StateTable_t TttDrawRules[] =
 {
-    { KC_UP,    TttResultUpAction,   &TblTttDraw },
-    { KC_DOWN,  TttResultDownAction, &TblTttDraw },
-    { KC_ENTER, DummyFunc,           &TblTttResultDecide },
-    { KC_ESC,   TttBackAction,       &TblTttMenu },
+    { KEY_UP,    TttResultUpAction,   &StateTttDraw },
+    { KEY_DOWN,  TttResultDownAction, &StateTttDraw },
+    { KEY_ENTER, TttNoop,           &StateTttResultDecide },
+    { KEY_ESC,   TttBackAction,       &StateTttMenu },
 };
 
-PUBLIC const StateType_t TblTttDraw =
+PUBLIC const StateType_t StateTttDraw =
 {
-    DummyFunc,
+    TttNoop,
     NO,
-    ListOf(TblTttDrawParts),
-    SCRN_TTT_DRAW
+    STATE_RULES(TttDrawRules),
+    SCREEN_TTT_DRAW
 };
 
 /* 结果确认：把选中项翻译成再开一局/返回菜单触发器 */
-static const StateTableParts_t TblTttResultDecideParts[] =
+static const StateTable_t TttResultDecideRules[] =
 {
-    { TRIG_TTT_REPLAY, TttNewGameAction, &TblTttXTurn },
-    { TRIG_TTT_MENU,   TttBackAction,    &TblTttMenu },
+    { TRIG_TTT_REPLAY, TttNewGameAction, &StateTttXTurn },
+    { TRIG_TTT_MENU,   TttBackAction,    &StateTttMenu },
 };
 
-PUBLIC const StateType_t TblTttResultDecide =
+PUBLIC const StateType_t StateTttResultDecide =
 {
     TttResultDecideEntry,
     YES,
-    ListOf(TblTttResultDecideParts),
-    PT_SCRN_DUMMY
+    STATE_RULES(TttResultDecideRules),
+    SCREEN_ID_NONE
 };
 
 /* 退出状态：不再处理按键，主循环渲染后直接结束 */
-static const StateTableParts_t TblTttQuitParts[] =
+static const StateTable_t TttQuitRules[] =
 {
-    { KC_ESC, DummyFunc, &TblTttQuit },
+    { KEY_ESC, TttNoop, &StateTttQuit },
 };
 
-PUBLIC const StateType_t TblTttQuit =
+PUBLIC const StateType_t StateTttQuit =
 {
-    DummyFunc,
+    TttNoop,
     NO,
-    ListOf(TblTttQuitParts),
-    SCRN_TTT_QUIT
+    STATE_RULES(TttQuitRules),
+    SCREEN_TTT_QUIT
 };
 
 /*=========================================================

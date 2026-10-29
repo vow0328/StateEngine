@@ -15,7 +15,7 @@
  * 状态流转示意见 Action_StateTransition_Sample.c 顶部注释。
  *=========================================================*/
 
-/* 自动迁移状态内部触发器（由状态入口函数返回，不来自按键） */
+/* 自动迁移状态内部触发器（由状态进入回调返回，不来自按键） */
 #define TRIG_TTT_TO_X          ((UI_16)0x0A01u)
 #define TRIG_TTT_TO_O          ((UI_16)0x0A02u)
 #define TRIG_TTT_X_WIN         ((UI_16)0x0A03u)
@@ -44,24 +44,24 @@
 #define TTT_MODE_CPU 1u
 
 /* 引擎提供的特殊迁移目标（定义在 MainStat.c） */
-extern const StateType_t TblPreviousState;  /* 回退到上一状态（出栈） */
-extern const StateType_t TblFormEntryState; /* 取当前状态（栈顶，不弹栈） */
+extern const StateType_t g_previousState; /* 回退到上一状态（出栈） */
+extern const StateType_t g_reenterState;  /* 取当前状态（栈顶，不弹栈） */
 
-/* 调试用：当前状态栈深度（引擎实现） */
-UI_8 GetStateStackDepth(void);
+/* 调试用：当前状态历史深度（引擎实现） */
+UI_8 StateGetHistoryTop(void);
 
 /* 井字棋状态对象（与 Action_StateTransition_Sample.c 中的状态表一一对应） */
-extern const StateType_t TblTttMenu;
-extern const StateType_t TblTttMenuDecide;
-extern const StateType_t TblTttXTurn;
-extern const StateType_t TblTttOTurn;
-extern const StateType_t TblTttCheck;
-extern const StateType_t TblTttComputerTurn;
-extern const StateType_t TblTttXWin;
-extern const StateType_t TblTttOWin;
-extern const StateType_t TblTttDraw;
-extern const StateType_t TblTttResultDecide;
-extern const StateType_t TblTttQuit;
+extern const StateType_t StateTttMenu;
+extern const StateType_t StateTttMenuDecide;
+extern const StateType_t StateTttXTurn;
+extern const StateType_t StateTttOTurn;
+extern const StateType_t StateTttCheck;
+extern const StateType_t StateTttComputerTurn;
+extern const StateType_t StateTttXWin;
+extern const StateType_t StateTttOWin;
+extern const StateType_t StateTttDraw;
+extern const StateType_t StateTttResultDecide;
+extern const StateType_t StateTttQuit;
 
 /* 屏幕层读取棋盘数据的只读接口（数据由 Action 层持有） */
 char TttGetCell(UI_8 idx);
