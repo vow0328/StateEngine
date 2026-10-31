@@ -1,47 +1,41 @@
-#include <stdio.h>
-#include "MainStat.h"
 #include "Action_StateTransition_Sample.h"
 #include "Screen_StateTransition_Sample.h"
 
-/*=========================================================
- * 交互式井字棋主循环
- *
- * 读键 -> 交给状态引擎迁移 -> 引擎返回后按 screenId 渲染。
- * 引擎负责状态表和状态栈；Screen 层只负责输入与显示。
- *=========================================================*/
-
 int main(void)
 {
-    UI_16 key;
+    UI_16 trigger;
 
-    TttScreenInit();
-    StateEngineInit(&StateTttMenu);
-    TttRenderCurrentScreen();
+    ScreenInit();
+    StateEngineInit(&StateHome);
+    /* 初始化不入历史栈，自迁移一次以便选择页可以回退首页。 */
+    StateEngine(EVENT_HOME_READY);
+    ScreenRenderCurrent();
 
     for (;;)
     {
-        key = TttScreenReadTrigger();
-
-        if (key == SCREEN_KEY_QUIT)
+        if (STATE_CURRENT() == &StateDeleteWorking)
         {
-            printf("\n退出。\n");
-            break;
+            ScreenWaitForWork();
+            /* 示例模拟下一轮执行事件，实机应由调度器或设备产生。 */
+            trigger = EVENT_DELETE_EXECUTE;
+        }
+        else
+        {
+            trigger = ScreenReadTrigger();
+            if (trigger == SCREEN_KEY_QUIT)
+            {
+                break;
+            }
+            if (trigger == SCREEN_KEY_NONE)
+            {
+                continue;
+            }
         }
 
-        if (key == SCREEN_KEY_NONE)
-        {
-            continue;
-        }
-
-        StateEngine(key);
-        TttRenderCurrentScreen();
-
-        /* 菜单选择“退出”后进入终止状态 */
-        if (STATE_CURRENT() == &StateTttQuit)
-        {
-            break;
-        }
+        StateEngine(trigger);
+        ScreenRenderCurrent();
     }
 
+    ScreenShutdown();
     return 0;
 }

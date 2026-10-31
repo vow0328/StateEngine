@@ -25,22 +25,11 @@
 #define STATE_RANGE_ANY ((UI_16)(STATE_RANGE_MIN + 2u))
 #endif
 
-/* 教学例程模拟的特殊按键（井字棋未使用，保留用于展示工程侧键值定义）
- * 注意：KEY_SCROLL 与 KEY_ENTER 当前取值相同；实机接入时请按项目键值表
- * 保证各按键值唯一。 */
-#define KEY_SHORT_OK ((UI_16)0x000Au)
-#define KEY_SHORT_CR ((UI_16)0x000Bu)
-#define KEY_TAB_OFF  ((UI_16)0x000Cu)
-#define KEY_SCROLL   ((UI_16)0x000Du)
-#define KEY_SCRN     ((UI_16)0x000Eu)
-#define KEY_PNLEN    ((UI_16)0x000Fu)
-#define KEY_ESC      ((UI_16)0x001Bu) /* 样例：取消/返回键 */
-
-/* 交互界面按键：方向键、确认键 */
+/* 示例按键：上、下、确认和取消。 */
+#define KEY_ESC      ((UI_16)0x001Bu)
 #define KEY_UP       ((UI_16)0x0010u)
 #define KEY_DOWN     ((UI_16)0x0011u)
-#define KEY_LEFT     ((UI_16)0x0012u)
-#define KEY_RIGHT    ((UI_16)0x0013u)
+#define KEY_DELETE   ((UI_16)0x0014u)
 #define KEY_ENTER    ((UI_16)0x000Du)
 
 /* STATE_RANGE_MIN～STATE_RANGE_MAX 各下标对应的触发值范围 */

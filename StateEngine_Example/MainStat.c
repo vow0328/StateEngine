@@ -1,12 +1,12 @@
 #include "MainStat.h"
 #include "TriggerDefine_Sample.h" /* 工程侧触发器配置（实机替换此文件） */
 
-/* 平台临界区保护（实机由显示或系统平台实现） */
+/* 平台临界区保护（实机由平台实现） */
 void PlatformEnterCritical(void);
 void PlatformExitCritical(void);
 
 /*=========================================================
- * 全局状态
+ * 状态引擎上下文与迁移历史
  *=========================================================*/
 StateInfo stateInfo = {0u, 0};
 StateHistory_t stateStack = {{0}, 0u};
@@ -14,15 +14,15 @@ StateHistory_t stateStack = {{0}, 0u};
 /*=========================================================
  * 内部函数前置声明
  *=========================================================*/
-/* 迁移规则访问 */
+/* 状态及迁移规则访问 */
 static const StateTable_t *GetTable(const StateType_t *state);
-static UI_8 GetTableCount(const StateType_t *state);
-static FUNC *GetAfFunc(const StateTable_t **pRule);
-static const StateType_t *GetNextState(const StateTable_t **pRule);
+static UI_8 GetTableNum(const StateType_t *state);
+static FUNC *GetAfFunc(const StateTable_t **pTable);
+static const StateType_t *GetNextState(const StateTable_t **pTable);
 static FUNC *GetBFfunc(const StateType_t *state);
 static BOOL GetAutolFlg(const StateType_t *state);
 
-/* 状态历史 */
+/* 状态迁移历史 */
 static UI_8 FindInHistory(const StateType_t *state);
 static void PushHistory(const StateType_t *state);
 static const StateType_t *GetCurrentState(void);
@@ -31,24 +31,34 @@ static const StateType_t *GetPreviousState(void);
 static void SaveHistory(void);
 
 /*=========================================================
- * 特殊迁移目标状态
+ * 特殊迁移目标：返回上一状态或重新进入当前历史状态
  *=========================================================*/
 static UI_16 StateNoop(UI_16 trigger)
 {
     return trigger;
 }
 
-const StateType_t g_previousState = {
-    StateNoop, NO, 0u, 0, SCREEN_ID_NONE};
+const StateType_t PreviousState = {
+    StateNoop,
+    NO,
+    0u,
+    0,
+    SCREEN_ID_NONE
+};
 
 const StateType_t g_reenterState = {
-    StateNoop, NO, 0u, 0, SCREEN_ID_NONE};
+    StateNoop,
+    NO,
+    0u,
+    0,
+    SCREEN_ID_NONE
+};
 
 /*=========================================================
- * 对外接口（按调用时序：初始化 → 运行 → 恢复 → 查询）
+ * 状态引擎接口
  *=========================================================*/
 
-/* 初始化：设置开机起始状态并执行一次进入回调 */
+/* 初始化当前状态并清空历史；起始状态不会入栈，也不会触发自动迁移 */
 void StateEngineInit(const StateType_t *initialState)
 {
     stateInfo.trigger = 0u;
@@ -63,124 +73,124 @@ void StateEngineInit(const StateType_t *initialState)
 }
 
 /*
- * 主状态引擎。
- * keyCode 为本次按键，由迁移规则决定下一状态；
- * 迁移目标是 g_previousState 时，StateEngineRecovery 把 stateInfo.state 换成
- * 上一状态，再执行该状态的进入回调完成迁移。
- * 自动迁移状态（autoFlg != NO）继续 while 循环。
+ * 使用 keyCode 作为触发值，在当前状态的迁移表中查找匹配规则。
+ * 匹配后依次执行规则回调、确定目标状态、记录历史、执行目标状态进入回调。
+ * 特殊目标由 StateEngineRecovery 转换为历史状态。
+ * 目标状态启用自动迁移时，以进入回调的返回值作为下一轮触发值；
+ * 未找到匹配规则或目标状态未启用自动迁移时返回。
  */
 void StateEngine(UI_16 keyCode)
 {
-    const StateTable_t *ruleCursor;
-    FUNC *action;
-    UI_8 ruleCount;
-    BOOL found;
+    const StateTable_t *TblPtr;
+    FUNC *FuncPtr;
+    UI_8 transitionNum;
+    BOOL result;
     UI_16 nextTrigger;
 
-    STATESETTRIGGER(keyCode);
+    SetStateTrigger(keyCode);
 
     while (1)
     {
-        /* 准备 */
-        ruleCursor = GetTable(stateInfo.state);
-        ruleCount = GetTableCount(stateInfo.state);
+        /* 获取当前状态的迁移规则表及规则数量 */
+        TblPtr = GetTable(stateInfo.state);
+        transitionNum = GetTableNum(stateInfo.state);
 
-        /* 分支：ruleCount 是数值，因此传入其地址 */
-        found = StateFindTable(&ruleCursor, &ruleCount, &stateInfo.trigger);
+        /* 按触发值查找第一条匹配的迁移规则 */
+        result = StateFindTable(&TblPtr, &transitionNum, &stateInfo.trigger);
 
-        if (found == NG)
+        if (result == NG)
         {
             return;
         }
 
-        /* 执行迁移规则的回调 */
-        action = GetAfFunc(&ruleCursor);
+        /* 在切换状态前执行匹配规则的回调 */
+        FuncPtr = GetAfFunc(&TblPtr);
         PlatformEnterCritical();
-        nextTrigger = (*action)(STATE_GET_TRIGGER());
+        nextTrigger = (*FuncPtr)(STATE_GET_TRIGGER());
         PlatformExitCritical();
 
-        stateInfo.state = GetNextState(&ruleCursor);
+        stateInfo.state = GetNextState(&TblPtr);
         StateEngineRecovery();
 
         SaveHistory();
-        /* 执行目标状态的进入回调，完成状态迁移 */
-        action = GetBFfunc(stateInfo.state);
+        /* 将规则回调的返回值传给目标状态的进入回调 */
+        FuncPtr = GetBFfunc(stateInfo.state);
         PlatformEnterCritical();
-        nextTrigger = (*action)(nextTrigger);
+        nextTrigger = (*FuncPtr)(nextTrigger);
         PlatformExitCritical();
 
-        /* 非自动迁移状态到此返回 */
+        /* 检查目标状态：NO 返回等待外部事件，YES 继续查目标状态的规则 */
         if (GetAutolFlg(stateInfo.state) == NO)
         {
             return;
         }
 
         /* 自动迁移：进入回调的返回值成为下一轮触发值 */
-        STATESETTRIGGER(nextTrigger);
+        SetStateTrigger(nextTrigger);
     }
 }
 
-/* 状态恢复：返回类目标直接出栈，随后由引擎执行目标状态的进入回调 */
+/* 将特殊迁移目标替换为历史中的上一状态或当前状态 */
 void StateEngineRecovery(void)
 {
-    if (stateInfo.state == &g_previousState)
+    if (stateInfo.state == &PreviousState)
     {
-        stateInfo.state = GetPreviousState(); /* 从历史中取上一个状态 */
+        stateInfo.state = GetPreviousState(); /* 回退历史栈，栈底保留 */
     }
     else if (stateInfo.state == &g_reenterState)
     {
-        stateInfo.state = GetCurrentState(); /* 取当前状态 */
+        stateInfo.state = GetCurrentState(); /* 取历史栈顶，不出栈 */
     }
 }
 
 /*
- * 触发器检索：
- * 1. 普通触发器按值匹配；
- * 2. STATE_RANGE_MIN～STATE_RANGE_MAX 转换成 g_triggerRanges 的范围；
- * 3. 按表内顺序返回第一个命中的规则。
+ * 在迁移规则表中按顺序查找触发值，返回第一条匹配的规则。
+ * 普通规则按触发值精确匹配；范围规则通过 g_triggerRanges 查找包含区间。
+ * 匹配时更新 *pTable 并返回 OK；未匹配时返回 NG。
  */
-BOOL StateFindTable(const StateTable_t **pRule, UI_8 *pRuleCount, UI_16 *pTrigger)
+BOOL StateFindTable(const StateTable_t **pTable, UI_8 *pRuleCount, UI_16 *pTrigger)
 {
-    const StateTable_t *rule;
+    const StateTable_t *ptr;
     UI_8 i;
     UI_16 rangeMin;
     UI_16 rangeMax;
     UI_16 rangeIndex;
     UI_16 trigger;
 
-    /* 准备 */
-    rule = *pRule;
+    /* 读取规则表和本次触发值 */
+    ptr = *pTable;
     trigger = *pTrigger;
 
-    /* 规则表检索 */
+    /* 按规则表顺序查找 */
     for (i = 0u; i < *pRuleCount; i++)
     {
-        /* 迁移条件范围 */
-        if ((rule->trigger >= STATE_RANGE_MIN) && (rule->trigger <= STATE_RANGE_MAX))
+        /* 将范围标识映射为区间；普通触发值对应单值区间 */
+        if ((ptr->trigger >= STATE_RANGE_MIN) && (ptr->trigger <= STATE_RANGE_MAX))
         {
-            rangeIndex = (UI_16)(rule->trigger - STATE_RANGE_MIN);
+            rangeIndex = (UI_16)(ptr->trigger - STATE_RANGE_MIN);
             rangeMin = g_triggerRanges[rangeIndex].min;
             rangeMax = g_triggerRanges[rangeIndex].max;
         }
         else
         {
-            rangeMin = rule->trigger;
-            rangeMax = rule->trigger;
+            rangeMin = ptr->trigger;
+            rangeMax = ptr->trigger;
         }
 
-        /* 迁移条件比较 */
+        /* 判断触发值是否落在规则区间内 */
         if ((trigger >= rangeMin) && (trigger <= rangeMax))
         {
-            *pRule = rule;
+            *pTable = ptr;
             return OK;
         }
-        rule++;
+
+        ptr++;
     }
 
     return NG;
 }
 
-/* 状态历史深度（调试用） */
+/* 获取当前历史栈的有效条目数（调试用） */
 UI_8 StateGetHistoryTop(void)
 {
     return stateStack.stackTop;
@@ -190,7 +200,7 @@ UI_8 StateGetHistoryTop(void)
  * 内部实现
  *=========================================================*/
 
-/*---------------- 迁移规则访问 ----------------*/
+/*---------------- 状态及迁移规则访问 ----------------*/
 
 /* 获取迁移规则表 */
 static const StateTable_t *GetTable(const StateType_t *state)
@@ -199,24 +209,24 @@ static const StateTable_t *GetTable(const StateType_t *state)
 }
 
 /* 获取迁移规则数量 */
-static UI_8 GetTableCount(const StateType_t *state)
+static UI_8 GetTableNum(const StateType_t *state)
 {
-    return state->transitionCount;
+    return state->transitionNum;
 }
 
-/* 获取迁移处理回调 */
-static FUNC *GetAfFunc(const StateTable_t **pRule)
+/* 获取匹配规则的迁移回调 */
+static FUNC *GetAfFunc(const StateTable_t **pTable)
 {
-    return (*pRule)->afFuncPtr;
+    return (*pTable)->afFuncPtr;
 }
 
-/* 获取下一状态 */
-static const StateType_t *GetNextState(const StateTable_t **pRule)
+/* 获取规则指定的目标状态 */
+static const StateType_t *GetNextState(const StateTable_t **pTable)
 {
-    return (*pRule)->nextState;
+    return (*pTable)->nextState;
 }
 
-/* 获取进入状态回调 */
+/* 获取目标状态的进入回调 */
 static FUNC *GetBFfunc(const StateType_t *state)
 {
     return state->bfFuncPtr;
@@ -228,7 +238,7 @@ static BOOL GetAutolFlg(const StateType_t *state)
     return (state->autoFlg & 0x01u);
 }
 
-/*---------------- 状态历史 ----------------*/
+/*---------------- 状态迁移历史 ----------------*/
 
 /* 从栈顶向前扫描：已存在返回其位置，未找到返回 0xFF */
 static UI_8 FindInHistory(const StateType_t *state)
@@ -264,16 +274,18 @@ static void PushHistory(const StateType_t *state)
         return;
     }
 
+    /* 当前实现不检查栈满，调用方必须保证历史不超过 STATE_HISTORY_DEPTH */
     stateStack.states[stateStack.stackTop++] = state;
 }
 
-/* 取当前状态：栈顶保存的就是当前状态 */
+/* 获取历史栈顶状态；栈为空时返回 0 */
 static const StateType_t *GetCurrentState(void)
 {
     if (stateStack.stackTop > 0u)
     {
         return stateStack.states[stateStack.stackTop - 1u];
     }
+
     return 0;
 }
 
@@ -286,14 +298,14 @@ static void PopHistory(void)
     }
 }
 
-/* 取上一状态：先弹出当前状态，再从更新后的栈顶取上一状态 */
+/* 弹出历史栈顶后获取新的栈顶；栈底保留 */
 static const StateType_t *GetPreviousState(void)
 {
     PopHistory();
     return GetCurrentState();
 }
 
-/* 记录状态迁移历史：已存在则回退栈顶，不存在则压栈 */
+/* 记录目标状态：自动迁移状态不入栈；已存在则回退，否则压栈 */
 static void SaveHistory(void)
 {
     PushHistory(stateInfo.state);
@@ -301,7 +313,7 @@ static void SaveHistory(void)
 
 /*---------------- 平台占位 ----------------*/
 
-/* 回调和迁移执行期间的临界区保护（实机替换为平台实现） */
+/* 规则回调和状态进入回调的临界区保护（实机替换为平台实现） */
 void PlatformEnterCritical(void)
 {
 }

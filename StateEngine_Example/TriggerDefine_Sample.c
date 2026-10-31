@@ -4,7 +4,8 @@
  * 范围触发器对照表：下标 = trigger - STATE_RANGE_MIN
  * 索引 0：0x0100～0x0102（数字事件）
  * 索引 1：0x0200～0x0202（字母事件）
- * 其余下标未显式赋值，由编译器零初始化为 {0, 0}，不会命中。
+ * 其余下标未显式赋值，由编译器零初始化为 {0, 0}；使用这些
+ * 范围标识时会匹配触发值 0，并不是禁用该范围。
  */
 const TriggerRange_t g_triggerRanges[STATE_RANGE_MAX - STATE_RANGE_MIN + 1u] = {
     { (UI_16)0x0100u, (UI_16)0x0102u }, /* 数字事件 */

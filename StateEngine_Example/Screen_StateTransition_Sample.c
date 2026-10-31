@@ -1,264 +1,260 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include "MainStat.h"
-#include "Screen_StateTransition_Sample.h"
-#include "Action_StateTransition_Sample.h"
-#include "TriggerDefine_Sample.h"
-
 #ifdef _WIN32
 #include <conio.h>
+#include <io.h>
+#include <windows.h>
 #endif
 
-/*=========================================================
- * 屏幕层：控制台初始化、按键读取、清屏、画面绘制
- *=========================================================*/
+#include "Action_StateTransition_Sample.h"
+#include "Screen_StateTransition_Sample.h"
 
-void TttScreenInit(void)
+typedef struct ScreenContext
+{
+    const StateType_t *previousState;
+    const char *pendingName;
+    int inputIsConsole;
+    int outputIsConsole;
+    int ansiEnabled;
+#ifdef _WIN32
+    HANDLE output;
+    DWORD originalMode;
+    UINT originalCodePage;
+#endif
+} ScreenContext;
+
+static ScreenContext g_screen;
+
+void ScreenInit(void)
 {
 #ifdef _WIN32
-    /* 源码与字符串都是 UTF-8；把控制台代码页切到 65001，
-       否则 Windows 控制台会按 GBK 解码，中文显示为乱码。 */
-    (void)system("chcp 65001 >nul");
+    g_screen.inputIsConsole = _isatty(_fileno(stdin));
+    g_screen.output = GetStdHandle(STD_OUTPUT_HANDLE);
+    g_screen.outputIsConsole = GetConsoleMode(g_screen.output, &g_screen.originalMode) != 0;
+    if (g_screen.outputIsConsole)
+    {
+        g_screen.originalCodePage = GetConsoleOutputCP();
+        SetConsoleOutputCP(CP_UTF8);
+        g_screen.ansiEnabled = SetConsoleMode(g_screen.output,
+            g_screen.originalMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+    }
+#endif
+}
+
+void ScreenShutdown(void)
+{
+    printf("\n  已退出演示，模拟数据未写入磁盘。\n");
+    fflush(stdout);
+#ifdef _WIN32
+    if (g_screen.outputIsConsole)
+    {
+        SetConsoleMode(g_screen.output, g_screen.originalMode);
+        SetConsoleOutputCP(g_screen.originalCodePage);
+    }
 #endif
 }
 
 static void ScreenClear(void)
 {
 #ifdef _WIN32
-    (void)system("cls");
-#else
-    printf("\033[2J\033[H");
-    fflush(stdout);
-#endif
-}
-
-UI_16 TttScreenReadTrigger(void)
-{
-#ifdef _WIN32
-    int ch;
-    int code;
-
-    ch = _getch();
-
-    /* 方向键：部分终端返回 0，部分返回 224 */
-    if ((ch == 0) || (ch == 224))
+    if (g_screen.outputIsConsole)
     {
-        code = _getch();
-        switch (code)
+        if (g_screen.ansiEnabled)
         {
-        case 72:
-            return KEY_UP;
-        case 80:
-            return KEY_DOWN;
-        case 75:
-            return KEY_LEFT;
-        case 77:
-            return KEY_RIGHT;
-        default:
-            return SCREEN_KEY_NONE;
+            printf("\033[2J\033[H");
+        }
+        else
+        {
+            CONSOLE_SCREEN_BUFFER_INFO info;
+            DWORD written;
+            COORD origin = { 0, 0 };
+
+            if (GetConsoleScreenBufferInfo(g_screen.output, &info))
+            {
+                DWORD cells = (DWORD)info.dwSize.X * (DWORD)info.dwSize.Y;
+                FillConsoleOutputCharacterA(g_screen.output, ' ', cells, origin, &written);
+                FillConsoleOutputAttribute(g_screen.output, info.wAttributes, cells, origin, &written);
+                SetConsoleCursorPosition(g_screen.output, origin);
+            }
         }
     }
-
-    switch (ch)
-    {
-    case 'w':
-    case 'W':
-        return KEY_UP;
-
-    case 's':
-    case 'S':
-        return KEY_DOWN;
-
-    case 'a':
-    case 'A':
-        return KEY_LEFT;
-
-    case 'd':
-    case 'D':
-        return KEY_RIGHT;
-
-    case ' ':
-    case 10:
-    case 13:
-        return KEY_ENTER;
-
-    case 27:
-        return KEY_ESC;
-
-    case 'q':
-    case 'Q':
-        return SCREEN_KEY_QUIT;
-
-    default:
-        return SCREEN_KEY_NONE;
-    }
-#else
-    /* 非 Windows：按行输入，每行一个操作；空行表示 Enter */
-    char line[16];
-
-    if (fgets(line, (int)sizeof(line), stdin) == NULL)
-    {
-        return SCREEN_KEY_QUIT;
-    }
-
-    switch (line[0])
-    {
-    case 'w':
-    case 'W':
-        return KEY_UP;
-
-    case 's':
-    case 'S':
-        return KEY_DOWN;
-
-    case 'a':
-    case 'A':
-        return KEY_LEFT;
-
-    case 'd':
-    case 'D':
-        return KEY_RIGHT;
-
-    case ' ':
-    case '\n':
-    case '\r':
-        return KEY_ENTER;
-
-    case 27:
-        return KEY_ESC;
-
-    case 'q':
-    case 'Q':
-        return SCREEN_KEY_QUIT;
-
-    default:
-        return SCREEN_KEY_NONE;
-    }
 #endif
 }
 
-/*=========================================================
- * 画面绘制
- *=========================================================*/
-
-static void TttPrintCell(UI_8 idx, BOOL showCursor)
+static void ScreenAccent(const char *text)
 {
-    char c;
-
-    c = TttGetCell(idx);
-    if (c == (char)0)
+    if (g_screen.ansiEnabled)
     {
-        /* 空位不显示数字，避免和 X/O 混淆；光标仍用 [] 标出 */
-        c = ' ';
-    }
-
-    if ((showCursor != FALSE) && (idx == TttGetCursor()))
-    {
-        printf("[%c]", c);
+        printf("\033[1;36m%s\033[0m", text);
     }
     else
     {
-        printf(" %c ", c);
+        printf("%s", text);
     }
 }
 
-static void TttPrintBoard(BOOL showCursor)
+static UI_16 ScreenMapKey(int key)
 {
-    UI_8 row;
-    UI_8 col;
-
-    for (row = 0u; row < 3u; row++)
+    switch (key)
     {
-        printf("  +---+---+---+\n");
-        printf("  |");
-        for (col = 0u; col < 3u; col++)
+    case 'w':
+    case 'W':
+        return KEY_UP;
+    case 's':
+    case 'S':
+        return KEY_DOWN;
+    case 'd':
+    case 'D':
+        return KEY_DELETE;
+    case 'c':
+    case 'C':
+    case 27:
+        return KEY_ESC;
+    case '\n':
+    case '\r':
+        return KEY_ENTER;
+    case 'q':
+    case 'Q':
+        return SCREEN_KEY_QUIT;
+    default:
+        return SCREEN_KEY_NONE;
+    }
+}
+
+UI_16 ScreenReadTrigger(void)
+{
+#ifdef _WIN32
+    if (g_screen.inputIsConsole)
+    {
+        int key = _getch();
+
+        if ((key == 0) || (key == 224))
         {
-            TttPrintCell((UI_8)(row * 3u + col), showCursor);
-            printf("|");
+            key = _getch();
+            if (key == 72) return KEY_UP;
+            if (key == 80) return KEY_DOWN;
+            if (key == 83) return KEY_DELETE;
+            return SCREEN_KEY_NONE;
         }
-        printf("\n");
+        return ScreenMapKey(key);
     }
-    printf("  +---+---+---+\n");
-}
+#endif
 
-static void TttRenderMenu(void)
-{
-    UI_8 sel;
-
-    sel = TttGetMenuSel();
-    printf("  主菜单\n\n");
-    printf("  %s 双人对战\n", (sel == TTT_MENU_2P) ? ">" : " ");
-    printf("  %s 人机对战（你执 X）\n", (sel == TTT_MENU_CPU) ? ">" : " ");
-    printf("  %s 退出\n", (sel == TTT_MENU_QUIT) ? ">" : " ");
-    printf("\n  ↑↓/W/S 选择   Enter 确认   Q 退出\n");
-}
-
-static void TttRenderGame(void)
-{
-    const char *notice;
-
-    printf("  %s\n\n", (TttGetMode() == TTT_MODE_CPU) ? "人机对战（你执 X）" : "双人对战");
-    printf("  %c 回合\n\n", TttGetCurrentMover());
-    TttPrintBoard(TRUE);
-    printf("\n  ↑↓←→/WASD 移动   Enter 落子   Esc 返回菜单   Q 退出\n");
-
-    notice = TttGetNotice();
-    if (notice != NULL)
     {
-        printf("\n  %s\n", notice);
+        char line[16];
+
+        if (fgets(line, (int)sizeof(line), stdin) == NULL)
+        {
+            return SCREEN_KEY_QUIT;
+        }
+        return ScreenMapKey((unsigned char)line[0]);
     }
 }
 
-static void TttRenderResult(const char *msg)
+void ScreenWaitForWork(void)
 {
-    UI_8 sel;
-
-    sel = TttGetResultSel();
-    printf("  %s\n\n", msg);
-    TttPrintBoard(FALSE);
-    printf("\n  %s 再来一局\n", (sel == TTT_RESULT_REPLAY) ? ">" : " ");
-    printf("  %s 返回主菜单\n", (sel == TTT_RESULT_MENU) ? ">" : " ");
-    printf("\n  ↑↓/W/S 选择   Enter 确认   Esc 返回菜单\n");
+#ifdef _WIN32
+    if (g_screen.inputIsConsole && g_screen.outputIsConsole)
+    {
+        Sleep(650);
+    }
+#endif
 }
 
-void TttRenderCurrentScreen(void)
+void ScreenRenderCurrent(void)
 {
+    const DatabaseContext *database = DbGetContext();
+    const StateType_t *currentState = STATE_CURRENT();
+    UI_8 index;
+
     ScreenClear();
-    printf("=== 井字棋 ===\n\n");
+    printf("\n  ");
+    ScreenAccent("DATABASE WORKSPACE");
+    printf("  /  数据库管理演示                      [模拟数据]\n");
+    printf("  ------------------------------------------------------------\n");
 
-    /* 自动迁移状态在引擎内部执行完，不会成为最终状态；
-       这里只处理实际画面 ID。 */
-    switch (STATE_CURRENT()->screenId)
+    if ((g_screen.previousState == &StateDeleteWorking) && (g_screen.pendingName != 0))
     {
-    case SCREEN_TTT_MENU:
-        TttRenderMenu();
+        printf("\n  [完成] 已删除 %s，仅影响本次内存数据。\n", g_screen.pendingName);
+        g_screen.pendingName = 0;
+    }
+
+    switch (currentState->screenId)
+    {
+    case SCREEN_HOME:
+        printf("\n  01  首页\n\n");
+        printf("  管理模拟数据库，观察不同层次的状态迁移。\n");
+        printf("  当前可用：%u 个数据库\n\n", (unsigned int)database->count);
+        printf("  [进入选择页]  先自动检查数据，再按需初始化页面。\n");
+        printf("\n  操作  Enter 进入  |  Q 退出\n");
         break;
 
-    case SCREEN_TTT_XTURN:
-    case SCREEN_TTT_OTURN:
-        TttRenderGame();
+    case SCREEN_DATABASE_SELECT:
+        printf("\n  02  选择数据库                         %u / %u\n\n",
+               (unsigned int)(database->selected + 1u), (unsigned int)database->count);
+        for (index = 0u; index < database->count; index++)
+        {
+            printf("    %s  %02u   %s%s\n", (index == database->selected) ? ">" : " ",
+                   (unsigned int)(index + 1u), database->items[index],
+                   (index == database->selected) ? "   [当前选择]" : "");
+        }
+        if (g_screen.previousState == &StateDatabaseSelect)
+        {
+            printf("\n  页内操作：仅更新选择并重新进入页面，不重复初始化。\n");
+        }
+        else if (g_screen.previousState == &StateDeleteConfirm)
+        {
+            printf("\n  已取消删除，保留当前选择。\n");
+        }
+        else
+        {
+            printf("\n  页内移动不会经过入口检查或重复初始化。\n");
+        }
+        if (g_screen.inputIsConsole)
+        {
+            printf("\n  操作  上/下 或 W/S 选择  |  D/Delete 删除  |  Esc/C 返回\n");
+        }
+        else
+        {
+            printf("\n  操作  W/S 选择  |  D 删除  |  C 返回\n");
+        }
         break;
 
-    case SCREEN_TTT_XWIN:
-        TttRenderResult((TttGetMode() == TTT_MODE_CPU) ? "你赢了！" : "X 获胜！");
+    case SCREEN_DATABASE_EMPTY:
+        printf("\n  02  暂无数据库\n\n");
+        printf("  入口或删除后的检查发现列表为空。\n");
+        printf("  返回首页后再次进入，仍会经过入口检查。\n");
+        printf("\n  操作  %s 返回首页\n", g_screen.inputIsConsole ? "Esc/C" : "C");
         break;
 
-    case SCREEN_TTT_OWIN:
-        TttRenderResult((TttGetMode() == TTT_MODE_CPU) ? "电脑获胜！" : "O 获胜！");
+    case SCREEN_DELETE_CONFIRM:
+        printf("\n  03  确认删除\n\n");
+        printf("  目标：%s\n", database->items[database->selected]);
+        printf("  此操作仅删除模拟数据，不会修改真实数据库或文件。\n");
+        printf("\n  操作  Enter 确认删除  |  %s 取消并保留选择\n",
+               g_screen.inputIsConsole ? "Esc/C" : "C");
         break;
 
-    case SCREEN_TTT_DRAW:
-        TttRenderResult("平局。");
-        break;
-
-    case SCREEN_TTT_QUIT:
-        printf("  谢谢游玩。\n");
+    case SCREEN_DELETE_WORKING:
+        g_screen.pendingName = database->items[database->selected];
+        printf("\n  04  正在处理\n\n");
+        printf("  正在模拟删除 %s ...\n", g_screen.pendingName);
+        printf("  工作状态先返回主循环，随后由模拟事件继续执行。\n");
         break;
 
     default:
-        printf("  [未知画面 %u]\n", (unsigned int)STATE_CURRENT()->screenId);
+        printf("\n  无法显示画面：%u\n", (unsigned int)currentState->screenId);
+        printf("  操作  Q 退出\n");
         break;
     }
 
+    printf("\n  ------------------------------------------------------------\n");
+    printf("  INIT %-5u 页面初始化  |  DISPLAY %-5u 状态进入\n",
+           (unsigned int)database->initCount, (unsigned int)database->displayCount);
+    printf("  全局  Q 退出\n");
+    if (!g_screen.inputIsConsole)
+    {
+        printf("  行输入模式：输入字符后按 Enter；确认操作直接按 Enter。\n");
+    }
     fflush(stdout);
+    g_screen.previousState = currentState;
 }
