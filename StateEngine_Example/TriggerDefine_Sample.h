@@ -30,6 +30,7 @@
 #define KEY_UP       ((UI_16)0x0010u)
 #define KEY_DOWN     ((UI_16)0x0011u)
 #define KEY_DELETE   ((UI_16)0x0014u)
+#define KEY_ERROR    ((UI_16)0x0015u)
 #define KEY_ENTER    ((UI_16)0x000Du)
 
 /* STATE_RANGE_MIN～STATE_RANGE_MAX 各下标对应的触发值范围 */

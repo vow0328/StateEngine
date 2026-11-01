@@ -14,7 +14,7 @@ typedef struct TriggerRange_t
     UI_16 max;
 } TriggerRange_t;
 
-/* 规则回调返回值传给目标状态进入回调；自动迁移时后者返回下一轮触发值 */
+/* 后处理函数返回值传给目标状态的前处理函数；自动迁移时前处理返回下一轮触发值 */
 typedef UI_16 FUNC(UI_16);
 
 /* 状态类型前置声明 */
@@ -24,15 +24,15 @@ typedef struct StateType_t StateType_t;
 typedef struct StateTable_t
 {
     UI_16 trigger;               /* 匹配的触发值或范围标识 */
-    FUNC *afFuncPtr;             /* 切换状态前执行的规则回调 */
+    FUNC *postProcessFunc;       /* 命中规则后、切换状态前执行的后处理函数 */
     const StateType_t *nextState; /* 规则匹配后的目标状态 */
 } StateTable_t;
 
-/* 状态定义：进入回调、自动迁移标志和该状态的迁移规则 */
+/* 状态定义：前处理函数、自动迁移标志和该状态的迁移规则 */
 struct StateType_t
 {
-    FUNC *bfFuncPtr;             /* 进入该状态时执行的回调 */
-    UI_8 autoFlg : 2;            /* bit0=1：入口返回值驱动自动迁移，且不入历史栈 */
+    FUNC *preProcessFunc;        /* 进入该状态时执行的前处理函数 */
+    UI_8 autoFlg : 2;            /* bit0=1：前处理返回值驱动自动迁移，且不入历史栈 */
     UI_8 transitionNum : 6;      /* 迁移规则数量，最大 63 */
     const StateTable_t *atTable; /* 当前状态的迁移规则表 */
     UI_16 screenId;              /* 画面 ID */

@@ -8,6 +8,7 @@
 #define EVENT_DELETE_EXECUTE ((UI_16)0x0401u)
 #define EVENT_DB_OK       ((UI_16)0x0402u)
 #define EVENT_DB_EMPTY    ((UI_16)0x0403u)
+#define EVENT_DB_ERROR    ((UI_16)0x0404u)
 
 typedef struct DatabaseContext
 {
@@ -16,6 +17,7 @@ typedef struct DatabaseContext
     UI_8 selected;
     UI_16 initCount;
     UI_16 displayCount;
+    BOOL simulateEntryError;
 } DatabaseContext;
 
 extern const StateType_t PreviousState;
@@ -23,6 +25,7 @@ extern const StateType_t StateHome;
 extern const StateType_t StateDatabaseEntry;
 extern const StateType_t StateDatabaseSelect;
 extern const StateType_t StateDatabaseEmpty;
+extern const StateType_t StateDatabaseError;
 extern const StateType_t StateDeleteConfirm;
 extern const StateType_t StateDeleteWorking;
 extern const StateType_t StateDeleteCheck;

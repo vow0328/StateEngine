@@ -105,6 +105,9 @@ static UI_16 ScreenMapKey(int key)
     case 'd':
     case 'D':
         return KEY_DELETE;
+    case 'e':
+    case 'E':
+        return KEY_ERROR;
     case 'c':
     case 'C':
     case 27:
@@ -184,8 +187,9 @@ void ScreenRenderCurrent(void)
         printf("\n  01  首页\n\n");
         printf("  管理模拟数据库，观察不同层次的状态迁移。\n");
         printf("  当前可用：%u 个数据库\n\n", (unsigned int)database->count);
+        printf("  检查故障：%s（仅模拟入口检查）\n", database->simulateEntryError ? "开启" : "关闭");
         printf("  [进入选择页]  先自动检查数据，再按需初始化页面。\n");
-        printf("\n  操作  Enter 进入  |  Q 退出\n");
+        printf("\n  操作  Enter 进入  |  E 切换模拟故障  |  Q 退出\n");
         break;
 
     case SCREEN_DATABASE_SELECT:
@@ -223,6 +227,13 @@ void ScreenRenderCurrent(void)
         printf("\n  02  暂无数据库\n\n");
         printf("  入口或删除后的检查发现列表为空。\n");
         printf("  返回首页后再次进入，仍会经过入口检查。\n");
+        printf("\n  操作  %s 返回首页\n", g_screen.inputIsConsole ? "Esc/C" : "C");
+        break;
+
+    case SCREEN_DATABASE_ERROR:
+        printf("\n  02  数据库检查失败\n\n");
+        printf("  入口检查返回错误，自动匹配错误规则并进入本页。\n");
+        printf("  返回首页后按 E 关闭模拟故障，再尝试进入。\n");
         printf("\n  操作  %s 返回首页\n", g_screen.inputIsConsole ? "Esc/C" : "C");
         break;
 

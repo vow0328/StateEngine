@@ -17,9 +17,9 @@ StateHistory_t stateStack = {{0}, 0u};
 /* 状态及迁移规则访问 */
 static const StateTable_t *GetTable(const StateType_t *state);
 static UI_8 GetTableNum(const StateType_t *state);
-static FUNC *GetAfFunc(const StateTable_t **pTable);
+static FUNC *GetPostProcessFunc(const StateTable_t **pTable);
 static const StateType_t *GetNextState(const StateTable_t **pTable);
-static FUNC *GetBFfunc(const StateType_t *state);
+static FUNC *GetPreProcessFunc(const StateType_t *state);
 static BOOL GetAutolFlg(const StateType_t *state);
 
 /* 状态迁移历史 */
@@ -46,7 +46,7 @@ const StateType_t PreviousState = {
     SCREEN_ID_NONE
 };
 
-const StateType_t g_reenterState = {
+const StateType_t FormEntryState = {
     StateNoop,
     NO,
     0u,
@@ -66,17 +66,17 @@ void StateEngineInit(const StateType_t *initialState)
 
     stateStack.stackTop = 0u;
 
-    if ((initialState != 0) && (initialState->bfFuncPtr != 0))
+    if ((initialState != 0) && (initialState->preProcessFunc != 0))
     {
-        stateInfo.trigger = initialState->bfFuncPtr(stateInfo.trigger);
+        stateInfo.trigger = initialState->preProcessFunc(stateInfo.trigger);
     }
 }
 
 /*
  * 使用 keyCode 作为触发值，在当前状态的迁移表中查找匹配规则。
- * 匹配后依次执行规则回调、确定目标状态、记录历史、执行目标状态进入回调。
+ * 匹配后依次执行后处理函数、确定目标状态、记录历史、执行目标状态前处理函数。
  * 特殊目标由 StateEngineRecovery 转换为历史状态。
- * 目标状态启用自动迁移时，以进入回调的返回值作为下一轮触发值；
+ * 目标状态启用自动迁移时，以前处理函数的返回值作为下一轮触发值；
  * 未找到匹配规则或目标状态未启用自动迁移时返回。
  */
 void StateEngine(UI_16 keyCode)
@@ -103,8 +103,8 @@ void StateEngine(UI_16 keyCode)
             return;
         }
 
-        /* 在切换状态前执行匹配规则的回调 */
-        FuncPtr = GetAfFunc(&TblPtr);
+        /* 在切换状态前执行匹配规则的后处理函数 */
+        FuncPtr = GetPostProcessFunc(&TblPtr);
         PlatformEnterCritical();
         nextTrigger = (*FuncPtr)(STATE_GET_TRIGGER());
         PlatformExitCritical();
@@ -113,8 +113,8 @@ void StateEngine(UI_16 keyCode)
         StateEngineRecovery();
 
         SaveHistory();
-        /* 将规则回调的返回值传给目标状态的进入回调 */
-        FuncPtr = GetBFfunc(stateInfo.state);
+        /* 将后处理函数的返回值传给目标状态的前处理函数 */
+        FuncPtr = GetPreProcessFunc(stateInfo.state);
         PlatformEnterCritical();
         nextTrigger = (*FuncPtr)(nextTrigger);
         PlatformExitCritical();
@@ -125,7 +125,7 @@ void StateEngine(UI_16 keyCode)
             return;
         }
 
-        /* 自动迁移：进入回调的返回值成为下一轮触发值 */
+        /* 自动迁移：前处理函数的返回值成为下一轮触发值 */
         SetStateTrigger(nextTrigger);
     }
 }
@@ -137,7 +137,7 @@ void StateEngineRecovery(void)
     {
         stateInfo.state = GetPreviousState(); /* 回退历史栈，栈底保留 */
     }
-    else if (stateInfo.state == &g_reenterState)
+    else if (stateInfo.state == &FormEntryState)
     {
         stateInfo.state = GetCurrentState(); /* 取历史栈顶，不出栈 */
     }
@@ -214,10 +214,10 @@ static UI_8 GetTableNum(const StateType_t *state)
     return state->transitionNum;
 }
 
-/* 获取匹配规则的迁移回调 */
-static FUNC *GetAfFunc(const StateTable_t **pTable)
+/* 获取匹配规则的后处理函数 */
+static FUNC *GetPostProcessFunc(const StateTable_t **pTable)
 {
-    return (*pTable)->afFuncPtr;
+    return (*pTable)->postProcessFunc;
 }
 
 /* 获取规则指定的目标状态 */
@@ -226,10 +226,10 @@ static const StateType_t *GetNextState(const StateTable_t **pTable)
     return (*pTable)->nextState;
 }
 
-/* 获取目标状态的进入回调 */
-static FUNC *GetBFfunc(const StateType_t *state)
+/* 获取目标状态的前处理函数 */
+static FUNC *GetPreProcessFunc(const StateType_t *state)
 {
-    return state->bfFuncPtr;
+    return state->preProcessFunc;
 }
 
 /* 获取自动迁移标志 */
@@ -313,7 +313,7 @@ static void SaveHistory(void)
 
 /*---------------- 平台占位 ----------------*/
 
-/* 规则回调和状态进入回调的临界区保护（实机替换为平台实现） */
+/* 后处理函数和前处理函数的临界区保护（实机替换为平台实现） */
 void PlatformEnterCritical(void)
 {
 }
