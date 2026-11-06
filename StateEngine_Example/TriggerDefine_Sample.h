@@ -7,22 +7,22 @@
  * 教学例程的工程侧配置（示例值，实机按项目修改）
  *
  * 内容不属于迁移引擎通用部分：
- * - 范围触发器标识 STATE_RANGE_MIN～STATE_RANGE_MAX
- * - 通配触发器 STATE_RANGE_ANY
+ * - 范围触发器标识 STATE_RANGE_FIRST～STATE_RANGE_LAST
+ * - 通配触发器 STATE_ANY
  * - 模拟特殊按键 KEY_*
- * - 范围触发器对照表 g_triggerRanges
+ * - 范围触发器对照表 TriggerRanges
  *=========================================================*/
 
 /* 范围触发器标识：StateFindTable() 会把该区间的 trigger 换算成
- * g_triggerRanges 的下标。若工程已定义这些宏，则沿用工程配置。 */
-#ifndef STATE_RANGE_MIN
-#define STATE_RANGE_MIN ((UI_16)0xF000u)
+ * TriggerRanges 的下标。若工程已定义这些宏，则沿用工程配置。 */
+#ifndef STATE_RANGE_FIRST
+#define STATE_RANGE_FIRST ((UI_16)0xF000u)
 #endif
-#ifndef STATE_RANGE_MAX
-#define STATE_RANGE_MAX ((UI_16)0xF003u)
+#ifndef STATE_RANGE_LAST
+#define STATE_RANGE_LAST ((UI_16)0xF006u)
 #endif
-#ifndef STATE_RANGE_ANY
-#define STATE_RANGE_ANY ((UI_16)(STATE_RANGE_MIN + 2u))
+#ifndef STATE_ANY
+#define STATE_ANY ((UI_16)0xFFFFu)
 #endif
 
 /* 示例按键：上、下、确认和取消。 */
@@ -31,9 +31,21 @@
 #define KEY_DOWN     ((UI_16)0x0011u)
 #define KEY_DELETE   ((UI_16)0x0014u)
 #define KEY_ERROR    ((UI_16)0x0015u)
+#define KEY_HOME     ((UI_16)0x0016u)
 #define KEY_ENTER    ((UI_16)0x000Du)
+#define KEY_BACKSPACE ((UI_16)0x0008u)
+#define KEY_LEFT     ((UI_16)0x0018u)
+#define KEY_RIGHT    ((UI_16)0x0019u)
 
-/* STATE_RANGE_MIN～STATE_RANGE_MAX 各下标对应的触发值范围 */
-extern const TriggerRange_t g_triggerRanges[STATE_RANGE_MAX - STATE_RANGE_MIN + 1u];
+#define RANGE_DIGIT   ((UI_16)(STATE_RANGE_FIRST + 0u))
+#define RANGE_UPPER   ((UI_16)(STATE_RANGE_FIRST + 1u))
+#define RANGE_LOWER   ((UI_16)(STATE_RANGE_FIRST + 2u))
+#define RANGE_SYMBOL1 ((UI_16)(STATE_RANGE_FIRST + 3u))
+#define RANGE_SYMBOL2 ((UI_16)(STATE_RANGE_FIRST + 4u))
+#define RANGE_SYMBOL3 ((UI_16)(STATE_RANGE_FIRST + 5u))
+#define RANGE_SYMBOL4 ((UI_16)(STATE_RANGE_FIRST + 6u))
+
+/* STATE_RANGE_FIRST～STATE_RANGE_LAST 各下标对应的触发值范围 */
+extern const TriggerRange_t TriggerRanges[STATE_RANGE_LAST - STATE_RANGE_FIRST + 1u];
 
 #endif /* TRIGGER_DEFINE_SAMPLE_H */

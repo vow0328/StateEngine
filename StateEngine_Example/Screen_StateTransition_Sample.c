@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #ifdef _WIN32
 #include <conio.h>
 #include <io.h>
@@ -15,6 +16,8 @@ typedef struct ScreenContext
     int inputIsConsole;
     int outputIsConsole;
     int ansiEnabled;
+    char inputLine[256];
+    size_t inputPosition;
 #ifdef _WIN32
     HANDLE output;
     DWORD originalMode;
@@ -92,8 +95,32 @@ static void ScreenAccent(const char *text)
     }
 }
 
+static void ScreenCell(const char *value, int selected)
+{
+    if (selected && g_screen.ansiEnabled)
+    {
+        printf("\033[7m %-23s \033[0m", value);
+    }
+    else if (selected)
+    {
+        printf(" [%-23s]", value);
+    }
+    else
+    {
+        printf("  %-23s ", value);
+    }
+}
+
 static UI_16 ScreenMapKey(int key)
 {
+    if (STATE_CURRENT() == &StateDatabaseEdit)
+    {
+        if (key == 27) return KEY_ESC;
+        if ((key == '\n') || (key == '\r')) return KEY_ENTER;
+        if ((key == 8) || (key == 127)) return KEY_BACKSPACE;
+        if ((key >= ' ') && (key <= '~')) return (UI_16)key;
+        return SCREEN_KEY_NONE;
+    }
     switch (key)
     {
     case 'w':
@@ -104,10 +131,16 @@ static UI_16 ScreenMapKey(int key)
         return KEY_DOWN;
     case 'd':
     case 'D':
-        return KEY_DELETE;
+        return (STATE_CURRENT() == &StateDatabaseContent) ? KEY_RIGHT : KEY_DELETE;
+    case 'a':
+    case 'A':
+        return KEY_LEFT;
     case 'e':
     case 'E':
         return KEY_ERROR;
+    case 'h':
+    case 'H':
+        return KEY_HOME;
     case 'c':
     case 'C':
     case 27:
@@ -135,6 +168,8 @@ UI_16 ScreenReadTrigger(void)
             key = _getch();
             if (key == 72) return KEY_UP;
             if (key == 80) return KEY_DOWN;
+            if (key == 75) return KEY_LEFT;
+            if (key == 77) return KEY_RIGHT;
             if (key == 83) return KEY_DELETE;
             return SCREEN_KEY_NONE;
         }
@@ -143,13 +178,49 @@ UI_16 ScreenReadTrigger(void)
 #endif
 
     {
-        char line[16];
+        if (STATE_CURRENT() == &StateDatabaseEdit)
+        {
+            size_t length;
 
-        if (fgets(line, (int)sizeof(line), stdin) == NULL)
+            if (g_screen.inputLine[g_screen.inputPosition] != '\0')
+            {
+                return (UI_16)(unsigned char)g_screen.inputLine[g_screen.inputPosition++];
+            }
+            if (fgets(g_screen.inputLine, (int)sizeof(g_screen.inputLine), stdin) == NULL)
+            {
+                return KEY_ESC;
+            }
+            length = strcspn(g_screen.inputLine, "\r\n");
+            g_screen.inputLine[length] = '\0';
+            g_screen.inputPosition = 0u;
+            if (strcmp(g_screen.inputLine, ":save") == 0 || length == 0u)
+            {
+                g_screen.inputLine[0] = '\0';
+                return KEY_ENTER;
+            }
+            if (strcmp(g_screen.inputLine, ":cancel") == 0)
+            {
+                g_screen.inputLine[0] = '\0';
+                return KEY_ESC;
+            }
+            if (strcmp(g_screen.inputLine, ":back") == 0)
+            {
+                g_screen.inputLine[0] = '\0';
+                return KEY_BACKSPACE;
+            }
+            return (UI_16)(unsigned char)g_screen.inputLine[g_screen.inputPosition++];
+        }
+        g_screen.inputLine[0] = '\0';
+        g_screen.inputPosition = 0u;
+        if (fgets(g_screen.inputLine, (int)sizeof(g_screen.inputLine), stdin) == NULL)
         {
             return SCREEN_KEY_QUIT;
         }
-        return ScreenMapKey((unsigned char)line[0]);
+        {
+            UI_16 trigger = ScreenMapKey((unsigned char)g_screen.inputLine[0]);
+            g_screen.inputLine[0] = '\0';
+            return trigger;
+        }
     }
 }
 
@@ -168,6 +239,7 @@ void ScreenRenderCurrent(void)
     const DatabaseContext *database = DbGetContext();
     const StateType_t *currentState = STATE_CURRENT();
     UI_8 index;
+    UI_8 column;
 
     ScreenClear();
     printf("\n  ");
@@ -198,7 +270,7 @@ void ScreenRenderCurrent(void)
         for (index = 0u; index < database->count; index++)
         {
             printf("    %s  %02u   %s%s\n", (index == database->selected) ? ">" : " ",
-                   (unsigned int)(index + 1u), database->items[index],
+                   (unsigned int)(index + 1u), database->items[index]->name,
                    (index == database->selected) ? "   [当前选择]" : "");
         }
         if (g_screen.previousState == &StateDatabaseSelect)
@@ -215,11 +287,46 @@ void ScreenRenderCurrent(void)
         }
         if (g_screen.inputIsConsole)
         {
-            printf("\n  操作  上/下 或 W/S 选择  |  D/Delete 删除  |  Esc/C 返回\n");
+            printf("\n  操作  上/下 或 W/S 选择  |  Enter 打开  |  D/Delete 删除  |  Esc/C 返回\n");
         }
         else
         {
-            printf("\n  操作  W/S 选择  |  D 删除  |  C 返回\n");
+            printf("\n  操作  W/S 选择  |  Enter 打开  |  D 删除  |  C 返回\n");
+        }
+        break;
+
+    case SCREEN_DATABASE_CONTENT:
+        printf("\n  03  数据库内容：%s\n\n", database->items[database->selected]->name);
+        printf("     编号                       内容\n");
+        printf("  +--------------------------+--------------------------+\n");
+        for (index = 0u; index < DATABASE_ROWS; index++)
+        {
+            printf("  |");
+            for (column = 0u; column < DATABASE_COLUMNS; column++)
+            {
+                ScreenCell(database->items[database->selected]->cells[index][column],
+                           index == database->row && column == database->column);
+                printf("|");
+            }
+            printf("\n");
+        }
+        printf("  +--------------------------+--------------------------+\n");
+        printf("\n  操作  %s 选择  |  Enter 修改  |  %s 返回  |  H 首页\n",
+               g_screen.inputIsConsole ? "方向键/WASD" : "W/A/S/D", g_screen.inputIsConsole ? "Esc/C" : "C");
+        break;
+
+    case SCREEN_DATABASE_EDIT:
+        printf("\n  03  修改单元格：%s / 第 %u 行 / %s\n\n", database->items[database->selected]->name,
+               (unsigned int)(database->row + 1u), database->column == 0u ? "编号" : "内容");
+        printf("    %s\n", database->items[database->selected]->cells[database->row][database->column]);
+        printf("\n  支持字母、数字、空格和 ASCII 常用符号；最多 %u 字节。\n", (unsigned int)(DATABASE_CELL_CAPACITY - 1u));
+        if (g_screen.inputIsConsole)
+        {
+            printf("  操作  输入字符  |  Backspace 删除末尾  |  Enter 保存  |  Esc 取消\n");
+        }
+        else
+        {
+            printf("  操作  输入文本后回车追加  |  :back 删除末尾  |  :save 保存  |  :cancel 取消\n");
         }
         break;
 
@@ -239,14 +346,14 @@ void ScreenRenderCurrent(void)
 
     case SCREEN_DELETE_CONFIRM:
         printf("\n  03  确认删除\n\n");
-        printf("  目标：%s\n", database->items[database->selected]);
+        printf("  目标：%s\n", database->items[database->selected]->name);
         printf("  此操作仅删除模拟数据，不会修改真实数据库或文件。\n");
         printf("\n  操作  Enter 确认删除  |  %s 取消并保留选择\n",
                g_screen.inputIsConsole ? "Esc/C" : "C");
         break;
 
     case SCREEN_DELETE_WORKING:
-        g_screen.pendingName = database->items[database->selected];
+        g_screen.pendingName = database->items[database->selected]->name;
         printf("\n  04  正在处理\n\n");
         printf("  正在模拟删除 %s ...\n", g_screen.pendingName);
         printf("  工作状态先返回主循环，随后由模拟事件继续执行。\n");
@@ -259,10 +366,11 @@ void ScreenRenderCurrent(void)
     }
 
     printf("\n  ------------------------------------------------------------\n");
-    printf("  INIT %-5u 页面初始化  |  DISPLAY %-5u 状态进入\n",
-           (unsigned int)database->initCount, (unsigned int)database->displayCount);
-    printf("  全局  Q 退出\n");
-    if (!g_screen.inputIsConsole)
+    if (currentState != &StateDatabaseEdit)
+    {
+        printf("  全局  Q 退出\n");
+    }
+    if (!g_screen.inputIsConsole && currentState != &StateDatabaseEdit)
     {
         printf("  行输入模式：输入字符后按 Enter；确认操作直接按 Enter。\n");
     }

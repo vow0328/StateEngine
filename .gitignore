@@ -9,13 +9,24 @@
 *.elf
 *.bin
 *.hex
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
 state_demo
 a.out
+build/
+cmake-build-*/
 
 # IDE / 本地配置
 .vscode/
 .idea/
 .claude/
+
+# 本地考核资料
+/StateEngine_Example/StateEngine考核题.md
+/StateEngine_Example/StateEngine考核参考答案.md
 
 # 操作系统
 Thumbs.db

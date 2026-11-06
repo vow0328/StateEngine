@@ -9,21 +9,34 @@
 #define EVENT_DB_OK       ((UI_16)0x0402u)
 #define EVENT_DB_EMPTY    ((UI_16)0x0403u)
 #define EVENT_DB_ERROR    ((UI_16)0x0404u)
+#define DATABASE_CELL_CAPACITY 24u
+#define DATABASE_ROWS 2u
+#define DATABASE_COLUMNS 2u
+
+typedef struct DatabaseItem
+{
+    const char *name;
+    char cells[DATABASE_ROWS][DATABASE_COLUMNS][DATABASE_CELL_CAPACITY];
+} DatabaseItem;
 
 typedef struct DatabaseContext
 {
-    const char *items[3];
+    DatabaseItem *items[3];
     UI_8 count;
     UI_8 selected;
-    UI_16 initCount;
-    UI_16 displayCount;
+    UI_8 row;
+    UI_8 column;
     BOOL simulateEntryError;
+    char editBackup[DATABASE_CELL_CAPACITY];
 } DatabaseContext;
 
 extern const StateType_t PreviousState;
+extern const StateType_t FormEntryState;
 extern const StateType_t StateHome;
 extern const StateType_t StateDatabaseEntry;
 extern const StateType_t StateDatabaseSelect;
+extern const StateType_t StateDatabaseContent;
+extern const StateType_t StateDatabaseEdit;
 extern const StateType_t StateDatabaseEmpty;
 extern const StateType_t StateDatabaseError;
 extern const StateType_t StateDeleteConfirm;

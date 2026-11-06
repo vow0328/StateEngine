@@ -23,19 +23,19 @@ typedef struct StateType_t StateType_t;
 /* 单条迁移规则 */
 typedef struct StateTable_t
 {
-    UI_16 trigger;               /* 匹配的触发值或范围标识 */
-    FUNC *postProcessFunc;       /* 命中规则后、切换状态前执行的后处理函数 */
+    UI_16 trigger;                /* 匹配的触发值或范围标识 */
+    FUNC *onExit;                 /* 命中规则后、切换状态前执行的后处理函数 */
     const StateType_t *nextState; /* 规则匹配后的目标状态 */
 } StateTable_t;
 
 /* 状态定义：前处理函数、自动迁移标志和该状态的迁移规则 */
 struct StateType_t
 {
-    FUNC *preProcessFunc;        /* 进入该状态时执行的前处理函数 */
-    UI_8 autoFlg : 2;            /* bit0=1：前处理返回值驱动自动迁移，且不入历史栈 */
-    UI_8 transitionNum : 6;      /* 迁移规则数量，最大 63 */
-    const StateTable_t *atTable; /* 当前状态的迁移规则表 */
-    UI_16 screenId;              /* 画面 ID */
+    FUNC *onEnter;             /* 进入该状态时执行的前处理函数 */
+    UI_8 autoRun : 2;          /* bit0=1：前处理返回值驱动自动迁移，且不入历史栈 */
+    UI_8 ruleCount : 6;        /* 迁移规则数量，最大 63 */
+    const StateTable_t *rules; /* 当前状态的迁移规则表 */
+    UI_16 screenId;            /* 画面 ID */
 };
 
 /* 引擎上下文 */
@@ -46,49 +46,49 @@ typedef struct StateInfo
 } StateInfo;
 
 /* 状态迁移历史栈 */
-#define STATE_HISTORY_DEPTH 25u
-#define STATE_HISTORY_NOT_FOUND ((UI_8)0xFFu) /* 历史中未找到 */
+#define STATE_HISTORY_CAPACITY 25u
+#define STATE_HISTORY_MISSING ((UI_8)0xFFu) /* 历史中未找到 */
 
 typedef struct StateHistory_t
 {
-    const StateType_t *states[STATE_HISTORY_DEPTH]; /* 历史状态，自动迁移状态不入栈 */
-    UI_8 stackTop;                                 /* 有效条目数；栈顶下标为 stackTop - 1 */
+    const StateType_t *states[STATE_HISTORY_CAPACITY]; /* 历史状态，自动迁移状态不入栈 */
+    UI_8 size;                                        /* 有效条目数；栈顶下标为 size - 1 */
 } StateHistory_t;
 
 /*=========================================================
  * 2. 全局实例
  *=========================================================*/
-extern StateInfo stateInfo;
-extern StateHistory_t stateStack;
+extern StateInfo stateContext;
+extern StateHistory_t stateHistory;
 
 /*=========================================================
  * 3. 范围触发器默认配置
  *
  * 默认标识只划定范围触发器区间的起点和终点；实际区间由工程侧提供
- * 的对照表 g_triggerRanges 决定。接入工程时可在包含本头文件前
- * 重定义 STATE_RANGE_MIN / STATE_RANGE_MAX。
+ * 的对照表 TriggerRanges 决定。接入工程时可在包含本头文件前
+ * 重定义 STATE_RANGE_FIRST / STATE_RANGE_LAST。
  *=========================================================*/
-#ifndef STATE_RANGE_MIN
-#define STATE_RANGE_MIN ((UI_16)0xF000u)
+#ifndef STATE_RANGE_FIRST
+#define STATE_RANGE_FIRST ((UI_16)0xF000u)
 #endif
 
-#ifndef STATE_RANGE_MAX
-#define STATE_RANGE_MAX ((UI_16)0xF003u)
+#ifndef STATE_RANGE_LAST
+#define STATE_RANGE_LAST ((UI_16)0xF003u)
 #endif
 
-#ifndef STATE_RANGE_ANY
-#define STATE_RANGE_ANY ((UI_16)(STATE_RANGE_MIN + 2u))
+#ifndef STATE_ANY
+#define STATE_ANY ((UI_16)0xFFFFu)
 #endif
 
-/* 范围对照表：由工程侧定义，下标为 trigger - STATE_RANGE_MIN */
-extern const TriggerRange_t g_triggerRanges[STATE_RANGE_MAX - STATE_RANGE_MIN + 1u];
+/* 范围对照表：由工程侧定义，下标为 trigger - STATE_RANGE_FIRST */
+extern const TriggerRange_t TriggerRanges[STATE_RANGE_LAST - STATE_RANGE_FIRST + 1u];
 
 /*=========================================================
  * 4. 状态描述宏
  *=========================================================*/
-#define SetStateTrigger(t) (stateInfo.trigger = (UI_16)(t))
-#define STATE_GET_TRIGGER() ((UI_16)stateInfo.trigger)
-#define STATE_CURRENT() (stateInfo.state)
+#define STATE_SET_TRIGGER(t) (stateContext.trigger = (UI_16)(t))
+#define STATE_TRIGGER() ((UI_16)stateContext.trigger)
+#define STATE_CURRENT() (stateContext.state)
 #define STATE_RULES(tbl) (UI_8)(sizeof(tbl) / sizeof((tbl)[0])), (tbl)
 
 /*=========================================================
@@ -97,6 +97,7 @@ extern const TriggerRange_t g_triggerRanges[STATE_RANGE_MAX - STATE_RANGE_MIN + 
 void StateEngineInit(const StateType_t *initialState);
 void StateEngine(UI_16 keyCode);
 void StateEngineRecovery(void);
+UI_8 StateGetHistoryTop(void);
 
 BOOL StateFindTable(const StateTable_t **pTable, UI_8 *pRuleCount, UI_16 *pTrigger);
 
