@@ -8,15 +8,15 @@ void PlatformExitCritical(void);
 /*=========================================================
  * 状态引擎上下文与迁移历史
  *=========================================================*/
-StateInfo stateContext = {0u, 0};
+StateInfo stateInfo = {0u, 0};
 StateHistory_t stateHistory = {{0}, 0u};
 
 /*=========================================================
  * 内部函数前置声明
  *=========================================================*/
-/* 状态及迁移规则访问 */
+/* 状态表与迁移表访问 */
 static const StateTable_t *GetTable(const StateType_t *state);
-static UI_8 GetRuleCount(const StateType_t *state);
+static UI_8 GetTransCnt(const StateType_t *state);
 static FUNC *GetOnExit(const StateTable_t **pTable);
 static const StateType_t *GetNextState(const StateTable_t **pTable);
 static FUNC *GetOnEnter(const StateType_t *state);
@@ -31,7 +31,7 @@ static const StateType_t *GetPreviousState(void);
 static void SaveHistory(void);
 
 /*=========================================================
- * 特殊迁移目标：返回上一状态或重新进入当前历史状态
+ * 特殊状态表占位：返回上一历史状态表，或重新进入历史栈顶状态表
  *=========================================================*/
 
 const StateType_t PreviousState = {
@@ -39,126 +39,119 @@ const StateType_t PreviousState = {
     NO,
     0u,
     0,
-    SCREEN_ID_NONE
-};
+    SCREEN_ID_NONE};
 
 const StateType_t FormEntryState = {
     NULL,
     NO,
     0u,
     0,
-    SCREEN_ID_NONE
-};
+    SCREEN_ID_NONE};
 
 /*=========================================================
  * 状态引擎接口
  *=========================================================*/
 
-/* 初始化当前状态并清空历史；起始状态不会入栈，也不会触发自动迁移 */
+/* 初始化当前状态表指针并清空历史；不执行前处理、不自动迁移，也不将初始状态表入栈 */
 void StateEngineInit(const StateType_t *initialState)
 {
-    stateContext.trigger = 0u;
-    stateContext.state = initialState;
+    stateInfo.trigger = 0u;
+    stateInfo.state = initialState;
 
-    stateHistory.size = 0u;
-
-    if ((initialState != 0) && (initialState->onEnter != 0))
-    {
-        stateContext.trigger = initialState->onEnter(stateContext.trigger);
-    }
+    stateHistory.top = 0u;
 }
 
 /*
- * 使用 keyCode 作为触发值，在当前状态的迁移表中查找匹配规则。
- * 匹配后依次执行后处理函数、确定目标状态、记录历史、执行目标状态前处理函数。
- * 特殊目标由 StateEngineRecovery 转换为历史状态。
- * 目标状态启用自动迁移时，以前处理函数的返回值作为下一轮触发值；
- * 未找到匹配规则或目标状态未启用自动迁移时返回。
+ * 使用 keyCode 作为触发值，查询当前状态表的 transTbl 指向的迁移表数组。
+ * 命中表项后，依次执行其后处理、切换状态表指针、记录历史、执行目标状态表的前处理。
+ * 特殊状态表占位由 StateEngineRecovery 解析为历史中的状态表指针。
+ * 目标状态表启用自动迁移时，以其前处理返回值作为下一轮迁移表查询的触发值；
+ * 未命中迁移表项，或目标状态表未启用自动迁移时返回。
  */
 void StateEngine(UI_16 keyCode)
 {
     const StateTable_t *TblPtr;
     FUNC *FuncPtr;
-    UI_8 ruleCount;
+    UI_8 transNum;
     BOOL result;
     UI_16 nextTrigger;
 
-    STATE_SET_TRIGGER(keyCode);
+    SetStateTrig(keyCode);
 
     while (1)
     {
-        /* 获取当前状态的迁移规则表及规则数量 */
-        TblPtr = GetTable(stateContext.state);
-        ruleCount = GetRuleCount(stateContext.state);
+        /* 从当前状态表读取迁移表数组首地址与条目数 */
+        TblPtr = GetTable(stateInfo.state);
+        transNum = GetTransCnt(stateInfo.state);
 
-        /* 按触发值查找第一条匹配的迁移规则 */
-        result = StateFindTable(&TblPtr, &ruleCount, &stateContext.trigger);
+        /* 按触发值查找第一个满足迁移条件的表项 */
+        result = StateFindTable(&TblPtr, &transNum, &stateInfo.trigger);
 
         if (result == NG)
         {
             return;
         }
 
-        /* 在切换状态前执行匹配规则的后处理函数 */
+        /* 切换状态表指针前，执行命中迁移表项的后处理函数 */
         FuncPtr = GetOnExit(&TblPtr);
         PlatformEnterCritical();
-        nextTrigger = (*FuncPtr)(STATE_TRIGGER());
+        nextTrigger = (*FuncPtr)(GetStateTrig());
         PlatformExitCritical();
 
-        stateContext.state = GetNextState(&TblPtr);
+        /* 切换到迁移表项指定的目标状态表，再解析特殊状态表占位。 */
+        stateInfo.state = GetNextState(&TblPtr);
         StateEngineRecovery();
 
         SaveHistory();
-        /* 将后处理函数的返回值传给目标状态的前处理函数 */
-        FuncPtr = GetOnEnter(stateContext.state);
+        /* 将迁移表项后处理的返回值传给目标状态表的前处理函数 */
+        FuncPtr = GetOnEnter(stateInfo.state);
         PlatformEnterCritical();
         nextTrigger = (*FuncPtr)(nextTrigger);
         PlatformExitCritical();
 
-        /* 检查目标状态：NO 返回等待外部事件，YES 继续查目标状态的规则 */
-        if (IsAutoState(stateContext.state) == NO)
+        /* 检查目标状态表：NO 返回等待外部事件，YES 继续查询其迁移表 */
+        if (IsAutoState(stateInfo.state) == NO)
         {
             return;
         }
 
         /* 自动迁移：前处理函数的返回值成为下一轮触发值 */
-        STATE_SET_TRIGGER(nextTrigger);
+        SetStateTrig(nextTrigger);
     }
 }
 
-/* 将特殊迁移目标替换为历史中的上一状态或当前状态 */
+/* 将特殊状态表占位替换为上一历史状态表或当前历史栈顶状态表的指针 */
 void StateEngineRecovery(void)
 {
-    if (stateContext.state == &PreviousState)
+    if (stateInfo.state == &PreviousState)
     {
-        stateContext.state = GetPreviousState(); /* 回退历史栈，栈底保留 */
+        stateInfo.state = GetPreviousState(); /* 回退历史栈，栈底保留 */
     }
-    else if (stateContext.state == &FormEntryState)
+    else if (stateInfo.state == &FormEntryState)
     {
-        stateContext.state = GetCurrentState(); /* 取历史栈顶，不出栈 */
+        stateInfo.state = GetCurrentState(); /* 取历史栈顶，不出栈 */
     }
 }
 
 /*
- * 在迁移规则表中按顺序查找触发值，返回第一条匹配的规则。
- * 普通规则按触发值精确匹配；范围规则通过 TriggerRanges 查找包含区间。
- * 匹配时更新 *pTable 并返回 OK；未匹配时返回 NG。
+ * 按迁移表数组的顺序检查条件，选取第一个匹配触发值的表项。
+ * 普通迁移条件精确匹配；范围条件通过 TriggerRanges 查询区间；STATE_ANY 无条件匹配。
+ * 命中时将 *pTable 指向该迁移表项并返回 OK；未命中时返回 NG，不切换状态表指针。
  */
-BOOL StateFindTable(const StateTable_t **pTable, UI_8 *pRuleCount, UI_16 *pTrigger)
+BOOL StateFindTable(const StateTable_t **pTable, UI_8 *pTransCnt, UI_16 *pTrigger)
 {
     const StateTable_t *ptr;
-    UI_8 i;
     UI_16 rangeMin;
     UI_16 rangeMax;
     UI_16 rangeIndex;
     UI_16 trigger;
 
-    /* 读取规则表和本次触发值 */
+    /* 读取迁移表数组首地址和本次触发值 */
     ptr = *pTable;
     trigger = *pTrigger;
 
-    /* 按规则表顺序查找 */
-    for (i = 0u; i < *pRuleCount; i++)
+    /* 按迁移表数组顺序查找 */
+    for (UI_8 i = 0u; i < *pTransCnt; i++)
     {
         if (ptr->trigger == STATE_ANY)
         {
@@ -166,9 +159,9 @@ BOOL StateFindTable(const StateTable_t **pTable, UI_8 *pRuleCount, UI_16 *pTrigg
             return OK;
         }
         /* 将范围标识映射为区间；普通触发值对应单值区间 */
-        if ((ptr->trigger >= STATE_RANGE_FIRST) && (ptr->trigger <= STATE_RANGE_LAST))
+        if ((ptr->trigger >= STATE_RANGE_MIN) && (ptr->trigger <= STATE_RANGE_MAX))
         {
-            rangeIndex = (UI_16)(ptr->trigger - STATE_RANGE_FIRST);
+            rangeIndex = (UI_16)(ptr->trigger - STATE_RANGE_MIN);
             rangeMin = TriggerRanges[rangeIndex].min;
             rangeMax = TriggerRanges[rangeIndex].max;
         }
@@ -178,7 +171,7 @@ BOOL StateFindTable(const StateTable_t **pTable, UI_8 *pRuleCount, UI_16 *pTrigg
             rangeMax = ptr->trigger;
         }
 
-        /* 判断触发值是否落在规则区间内 */
+        /* 判断触发值是否满足本迁移表项的区间条件 */
         if ((trigger >= rangeMin) && (trigger <= rangeMax))
         {
             *pTable = ptr;
@@ -191,61 +184,61 @@ BOOL StateFindTable(const StateTable_t **pTable, UI_8 *pRuleCount, UI_16 *pTrigg
     return NG;
 }
 
-UI_8 StateGetHistoryTop(void)
-{
-    return stateHistory.size;
-}
-
 /*=========================================================
  * 内部实现
  *=========================================================*/
 
-/*---------------- 状态及迁移规则访问 ----------------*/
+/*---------------- 状态表与迁移表访问 ----------------*/
 
-/* 获取迁移规则表 */
+/* 读取状态表中的迁移表数组指针 */
 static const StateTable_t *GetTable(const StateType_t *state)
 {
-    return state->rules;
+    return state->transTbl;
 }
 
-/* 获取迁移规则数量 */
-static UI_8 GetRuleCount(const StateType_t *state)
+/* 读取状态表中的迁移表条目数 */
+static UI_8 GetTransCnt(const StateType_t *state)
 {
-    return state->ruleCount;
+    return state->transNum;
 }
 
-/* 获取匹配规则的后处理函数 */
+/* 读取命中迁移表项的后处理函数 */
 static FUNC *GetOnExit(const StateTable_t **pTable)
 {
     return (*pTable)->onExit;
 }
 
-/* 获取规则指定的目标状态 */
+/* 读取迁移表项指定的目标状态表指针 */
 static const StateType_t *GetNextState(const StateTable_t **pTable)
 {
     return (*pTable)->nextState;
 }
 
-/* 获取目标状态的前处理函数 */
+/* 读取目标状态表的前处理函数 */
 static FUNC *GetOnEnter(const StateType_t *state)
 {
     return state->onEnter;
 }
 
-/* 获取自动迁移标志 */
+/* 读取状态表的自动迁移标志 */
 static BOOL IsAutoState(const StateType_t *state)
 {
-    return (state->autoRun & 0x01u);
+    return (state->autoFlg & 0x01u);
 }
 
 /*---------------- 状态迁移历史 ----------------*/
 
-/* 从栈顶向前扫描：已存在返回其位置，未找到返回 0xFF */
+UI_8 StateGetHistoryTop(void)
+{
+    return stateHistory.top;
+}
+
+/* 从栈顶向前查找状态表指针：找到返回下标，未找到返回 0xFF */
 static UI_8 FindInHistory(const StateType_t *state)
 {
     UI_8 i;
 
-    for (i = stateHistory.size; i > 0u; i--)
+    for (i = stateHistory.top; i > 0u; i--)
     {
         if (stateHistory.states[i - 1u] == state)
         {
@@ -260,8 +253,8 @@ static void PushHistory(const StateType_t *state)
 {
     UI_8 pos;
 
-    /* 自动迁移状态是过渡态，不作为返回目标 */
-    if ((state->autoRun & 0x01u) != 0u)
+    /* 启用自动迁移的状态表不入历史栈，不作为历史返回目标 */
+    if ((state->autoFlg & 0x01u) != 0u)
     {
         return;
     }
@@ -270,45 +263,45 @@ static void PushHistory(const StateType_t *state)
     if (pos != STATE_HISTORY_MISSING)
     {
         /* 已存储：栈顶回退到该位置，丢弃其后的历史 */
-        stateHistory.size = (UI_8)(pos + 1u);
+        stateHistory.top = (UI_8)(pos + 1u);
         return;
     }
 
     /* 当前实现不检查栈满，调用方必须保证历史不超过 STATE_HISTORY_CAPACITY */
-    stateHistory.states[stateHistory.size++] = state;
+    stateHistory.states[stateHistory.top++] = state;
 }
 
-/* 获取历史栈顶状态；栈为空时返回 0 */
+/* 获取历史栈顶保存的状态表指针；栈为空时返回 0 */
 static const StateType_t *GetCurrentState(void)
 {
-    if (stateHistory.size > 0u)
+    if (stateHistory.top > 0u)
     {
-        return stateHistory.states[stateHistory.size - 1u];
+        return stateHistory.states[stateHistory.top - 1u];
     }
 
     return 0;
 }
 
-/* 弹出当前状态：栈底保留，不把栈弹空 */
+/* 移除当前历史状态表指针；保留栈底，不把栈弹空 */
 static void PopHistory(void)
 {
-    if (stateHistory.size > 1u)
+    if (stateHistory.top > 1u)
     {
-        stateHistory.size--;
+        stateHistory.top--;
     }
 }
 
-/* 弹出历史栈顶后获取新的栈顶；栈底保留 */
+/* 弹出当前历史状态表指针后取新的栈顶指针；栈底保留 */
 static const StateType_t *GetPreviousState(void)
 {
     PopHistory();
     return GetCurrentState();
 }
 
-/* 记录目标状态：自动迁移状态不入栈；已存在则回退，否则压栈 */
+/* 记录目标状态表指针：自动迁移状态表不入栈；已存在则截断历史，否则压栈 */
 static void SaveHistory(void)
 {
-    PushHistory(stateContext.state);
+    PushHistory(stateInfo.state);
 }
 
 /*---------------- 平台占位 ----------------*/

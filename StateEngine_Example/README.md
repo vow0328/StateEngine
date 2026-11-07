@@ -1,38 +1,37 @@
 # 数据库选择状态迁移例程
 
-本例使用一组**内存中的模拟名称**，不连接、不修改任何真实数据库或文件。它重点展示：进入页面时自动检查并初始化，页面内移动时不重复初始化，删除时先显示工作状态，再自动检查结果。
+本例使用一组**内存中的模拟名称和表格数据**，不连接、不修改任何真实数据库或文件。它重点展示：每次切换画面都先经过 `autoFlg = YES` 的中间过渡状态表，再进入 `autoFlg = NO` 的画面状态表；同一画面内移动和输入直接自迁移，不重复执行跨画面初始化。
 
-入口文件为 `main.c`，引擎为本目录的 `MainStat.c/.h` 副本，根目录为引擎核心。状态表和业务数据位于 `Action_StateTransition_Sample.c`；输入和显示位于 `Screen_StateTransition_Sample.c`。逐步执行和指针图见 [状态迁移详解](状态迁移详解.md)。
+入口文件为 `main.c`，引擎为本目录的 `MainStat.c/.h` 副本，根目录为引擎核心。状态表、迁移表数组和业务数据位于 `Action_StateTransition_Sample.c`；输入和显示位于 `Screen_StateTransition_Sample.c`。逐步执行和指针图见 [状态迁移详解](状态迁移详解.md)。
+
+本项目中，`StateType_t` 定义**状态表**，`StateTable_t` 定义**迁移表**。例如 `StateDatabaseSelect` 是状态表，其 `transTbl` 指向 `DatabaseSelectRules` 迁移表数组，`transNum` 是数组条目数。数组中的每个迁移表项保存迁移条件、后处理函数和目标状态表指针；状态表本身保存前处理函数、自动迁移标志和画面 ID 等信息。
 
 ## 状态分层
 
 ```text
-HOME (NO)
-  └─ Enter → DatabaseEntry (YES：检查数据库)
-                 ├─ 模拟故障 ─────────────────────→ DatabaseError (NO)
-                 ├─ 有数据 → InitDatabaseSelect → DatabaseSelect (NO)
-                 └─ 无数据 ─────────────────────→ DatabaseEmpty (NO)
-
-DatabaseSelect (NO)
-  ├─ 上/下 → 移动选项 → DatabaseSelect (自迁移，仅重新进入画面)
-  ├─ Enter → DatabaseContent (NO：查看选中数据库的模拟内容)
-  │            ├─ 方向键/WASD → 选择单元格
-  │            ├─ Enter → DatabaseEdit (NO：范围规则匹配输入字符)
-  │            │        └─ 保存/取消 → PreviousState → DatabaseContent
-  │            ├─ 取消 → PreviousState → DatabaseSelect
-  │            └─ H → 定位历史中的 HOME → FormEntryState → HOME
-  ├─ 取消 → PreviousState → HOME
-  └─ 删除 → DeleteConfirm (NO)
-               ├─ 取消 → DatabaseSelect
-               └─ 确认 → DeleteWorking (NO：先显示工作画面)
-                            └─ 外部执行事件 → 删除 → DeleteCheck (YES)
-                                 ├─ 有剩余 → DeleteResume (YES：STATE_ANY) → InitDatabaseSelect → DatabaseSelect
-                                 └─ 已删空 ─────────────────────→ DatabaseEmpty
+当前画面状态表（NO）
+  ├─ 页内移动或输入 → 后处理 → 当前画面状态表（NO）
+  └─ 切换画面 → 入口或回退状态表（YES，SCREEN_ID_NONE）
+                         └─ 检查、初始化或解析历史 → 目标画面状态表（NO）
 ```
 
-`YES` 表示**目标状态前处理函数执行后**，使用其返回的触发值继续查该状态的规则表；`NO` 表示前处理函数执行后返回调用方，不是禁止迁移。`DatabaseEntry` 和 `DeleteCheck` 是自动过渡状态，不入历史栈；`DeleteWorking` 是普通状态，先让主循环渲染，再由主循环模拟产生执行事件。
+| 画面切换 | 自动过渡状态表（`YES`） | 最终画面状态表（`NO`） |
+|---|---|---|
+| 启动准备、空数据页或错误页返回首页 | `StateHomeEntry` | `StateHome` |
+| 首页进入数据库选择页 | `StateDatabaseEntry` | 正常进入 `StateDatabaseSelect`，无数据或故障进入相应提示页 |
+| 选择页打开数据库内容 | `StateContentEntry` | `StateDatabaseContent` |
+| 内容页进入单元格编辑 | `StateEditEntry` | `StateDatabaseEdit` |
+| 选择页打开删除确认 | `StateConfirmEntry` | `StateDeleteConfirm` |
+| 确认删除后进入工作画面 | `StateWorkingEntry` | `StateDeleteWorking` |
+| 删除执行完成 | `StateDeleteCheck`，有剩余时再经过 `StateDeleteResume` | `StateDatabaseSelect` 或 `StateDatabaseEmpty` |
+| 选择页、内容页返回，编辑保存或取消，取消删除 | `StateBackEntry` → `PreviousState` | 历史中的上一画面状态表 |
+| 内容页返回指定首页 | `StateHomeBackEntry` → `FormEntryState` | 历史中定位到的 `StateHome` |
 
-本例的 `DatabaseContext` 聚合列表、选择项和模拟故障标志。`InitDatabaseSelect` 后处理函数将选择项复位；`DummyFunc` 是无操作占位函数，原样返回输入值，供无需额外处理的前处理或后处理使用。画面由主循环根据当前状态渲染。
+`StateContentEntry`、`StateConfirmEntry`、`StateWorkingEntry` 检查数据库是否存在及所选条目是否有效；`StateEditEntry` 还检查行列边界。它们的迁移表都覆盖正常、无数据和错误返回值，分别进入目标画面、空数据页或错误页。`OpenDatabase` 只在内容页入口的正常分支重置光标，`BeginEdit` 只在编辑页入口的正常分支备份单元格。
+
+`YES` 表示**过渡状态表的前处理执行后**，使用其返回值继续查询迁移表，在同一次 `StateEngine()` 调用内到达画面状态表；不需要第二次按键。过渡状态表的画面 ID 是 `SCREEN_ID_NONE`，不会显示，也不进入历史栈。`NO` 表示前处理执行后返回调用方，供主循环渲染并等待事件。`StateDeleteWorking` 也是画面状态表，先由 `StateWorkingEntry` 自动切入，显示后再等待执行事件，不能把工作画面本身设为自动过渡态而跳过显示。
+
+本例的 `DatabaseContext` 聚合列表、选择项和模拟故障标志。迁移表项的 `InitDatabaseSelect` 后处理将选择项复位；`DummyFunc` 是无操作占位函数，原样返回输入值，供无需额外处理的状态表前处理或迁移表项后处理使用。画面由主循环根据当前状态表的画面 ID 渲染。
 
 ## 编译运行
 
@@ -65,24 +64,25 @@ Windows 下也可使用 `zig cc` 代替 `gcc`，输出为 `state_demo.exe` 并�
 
 ## 建议观察
 
-1. 从首页按 Enter：经过自动入口检查和 `InitDatabaseSelect`，进入列表。
-2. 按下方向键或 `S` / `W`：选择项改变，规则直接回到选择状态，不经过入口检查或重新初始化。可在 `CheckDatabaseSelect` 和 `InitDatabaseSelect` 设置断点验证。
-3. 按 `D`、再按 Enter：先显示模拟工作画面，主循环随后发出执行事件；如果还有数据，结果检查后重新初始化并回到列表。
+1. 启动时准备事件先经过 `StateHomeEntry` 自动进入首页；从首页按 Enter，再经过 `StateDatabaseEntry` 检查和 `InitDatabaseSelect` 初始化，进入列表。
+2. 按下方向键或 `S` / `W`：选择项改变，命中的迁移表项直接指向选择页状态表，不经过入口检查或重新初始化。可在 `CheckDatabaseSelect` 和 `InitDatabaseSelect` 设置断点验证。
+3. 按 `D`：经 `StateConfirmEntry` 检查后显示删除确认；再按 Enter，经 `StateWorkingEntry` 检查后显示工作画面。主循环随后发出执行事件，结果检查后回到列表或空数据页。
 4. 重复删除直到没有数据：自动检查进入空数据页面；输入 `c` 返回首页，再按 Enter，入口检查直接进入空数据页面。
-5. 选择页输入 `c`：使用 `PreviousState` 返回首页。启动时 `main.c` 特意发送首页自迁移事件以保存首页；`StateEngineInit()` 自身不会把初始状态入栈。
-6. 首页按 `E` 开启模拟故障，再按 Enter：入口前处理返回 `EVENT_DB_ERROR`，自动匹配错误规则并进入错误页；按 `C` 返回首页，再按 `E` 关闭故障即可正常进入。
-7. 在选择页选中数据库并按 Enter 查看模拟内容。按 `C` 使用 `PreviousState` 返回选择页；再次打开后按 `H`，后处理先在历史栈中定位首页并截断其后的历史，再通过 `FormEntryState` 取栈顶进入首页。
+5. 选择页输入 `c`：先进入 `StateBackEntry`，再自动通过 `PreviousState` 返回首页。启动时 `main.c` 发送准备事件，经 `StateHomeEntry` 进入首页并保存历史；`StateEngineInit()` 自身不会把初始状态入栈。
+6. 首页按 `E` 开启模拟故障，再按 Enter：入口状态表的前处理返回 `EVENT_DB_ERROR`，自动命中错误条件的迁移表项并进入错误页；按 `C` 返回首页，再按 `E` 关闭故障即可正常进入。
+7. 在选择页选中数据库并按 Enter，经 `StateContentEntry` 检查并初始化光标后查看内容。按 Enter 经 `StateEditEntry` 备份单元格后编辑；保存或取消经 `StateBackEntry` 返回内容页，保持光标位置。返回选择页也经过 `StateBackEntry`，保持数据库选择项。
+8. 内容页按 `H`：先进入 `StateHomeBackEntry`，其迁移表项后处理定位历史首页并截断后续历史，再通过 `FormEntryState` 自动进入首页。
 
-内容页的 `H` 规则演示返回特定状态：`FormEntryState` 本身只取历史栈顶，并不会搜索首页。例程启动时已将首页入栈；如果历史中找不到首页，后处理保留原栈，`FormEntryState` 将重新进入原栈顶，而不是自动跳转首页。初始内容为模拟记录，删除操作仅从列表移除条目。
+`StateBackEntry` 和 `StateHomeBackEntry` 都是自动回退过渡状态表，不会调用前进入口的初始化函数，因此返回时不会重置选择项、内容页光标或编辑备份。`FormEntryState` 只是取历史栈顶指针的特殊占位，首页定位由 `StateHomeBackEntry` 迁移表项的后处理完成。若历史中找不到首页，后处理保留原栈，最终重新进入原栈顶指向的状态。初始内容为模拟记录，删除操作仅从列表移除条目。
 
-内容页显示两列模拟数据（编号、内容），用方向键或 `W/A/S/D` 选择单元格，再按 `Enter` 修改；支持 ANSI 的终端用反色高亮，其他输出用方括号标记。编辑时，Windows 控制台可直接输入字符，`Backspace` 删除末尾，`Enter` 保存，`Esc` 取消并恢复该单元格的原值。行输入模式下，输入一行文字并回车追加；`:back` 删除末尾，`:save` 或空行保存，`:cancel` 取消。编辑模式中的字母不会触发普通页面的快捷键；数据仅保存在内存中，每个单元格最多 23 字节。输入规则分别处理数字、字母及 ASCII 空格和常用符号，符号按不连续区间拆为多条规则。
+内容页显示两列模拟数据（编号、内容），用方向键或 `W/A/S/D` 选择单元格，再按 `Enter` 修改；支持 ANSI 的终端用反色高亮，其他输出用方括号标记。编辑时，Windows 控制台可直接输入字符，`Backspace` 删除末尾，`Enter` 保存，`Esc` 取消并恢复该单元格的原值。行输入模式下，输入一行文字并回车追加；`:back` 删除末尾，`:save` 或空行保存，`:cancel` 取消。编辑模式中的字母不会触发普通页面的快捷键；数据仅保存在内存中，每个单元格最多 23 字节。编辑迁移表分别匹配数字、字母及 ASCII 空格和常用符号，符号按不连续区间拆为多个迁移表项。
 
-删除后仍有数据时，`StateDeleteResume` 是自动过渡状态，它的唯一规则使用 `STATE_ANY` 无条件进入选择页并初始化；它不依赖前处理返回的具体触发值。规则按表顺序匹配，使用通配兜底时应放在其他规则之后。
+删除后仍有数据时，`StateDeleteResume` 是自动迁移状态表，关联的迁移表只有一个表项，使用 `STATE_ANY` 无条件进入选择页并初始化，不依赖前处理返回的具体触发值。迁移表项按数组顺序匹配，通配兜底表项应放在其他表项之后。
 
 ## 接入注意
 
 - `StateEngineInit()` 不会自动执行后续迁移，也不保存初始状态；使用历史回退前须确认历史非空且包含预期来源。
-- 自动状态的前处理返回值必须匹配其迁移表，包括业务错误条件；未匹配会停在该状态，循环匹配则可能不返回。
+- 自动迁移状态表的前处理返回值应能命中其迁移表项，包括业务错误条件；未命中时当前指针仍可能指向该状态表，循环匹配则可能不返回。
 - 当前历史栈容量为 25，未实现栈满检查；空状态、空回调或空历史回退也可能引发非法访问。
 - `PlatformEnterCritical()` / `PlatformExitCritical()` 在例程中为空；实机须按平台实现。引擎仅保护回调调用，并不保证整个迁移原子化。
-- 范围触发器的标识和 `TriggerRanges` 需要在各编译单元中一致；本例用范围规则匹配编辑输入。未初始化范围 `{0, 0}` 仍会匹配触发值 0；`STATE_ANY` 不查询范围表。
+- 范围触发器的标识和 `TriggerRanges` 需要在各编译单元中一致；本例用迁移表的范围条件匹配编辑输入。未初始化范围 `{0, 0}` 仍会匹配触发值 0；`STATE_ANY` 不查询范围表。

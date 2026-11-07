@@ -113,7 +113,7 @@ static void ScreenCell(const char *value, int selected)
 
 static UI_16 ScreenMapKey(int key)
 {
-    if (STATE_CURRENT() == &StateDatabaseEdit)
+    if (GetStatePtr() == &StateDatabaseEdit)
     {
         if (key == 27) return KEY_ESC;
         if ((key == '\n') || (key == '\r')) return KEY_ENTER;
@@ -131,7 +131,7 @@ static UI_16 ScreenMapKey(int key)
         return KEY_DOWN;
     case 'd':
     case 'D':
-        return (STATE_CURRENT() == &StateDatabaseContent) ? KEY_RIGHT : KEY_DELETE;
+        return (GetStatePtr() == &StateDatabaseContent) ? KEY_RIGHT : KEY_DELETE;
     case 'a':
     case 'A':
         return KEY_LEFT;
@@ -178,7 +178,7 @@ UI_16 ScreenReadTrigger(void)
 #endif
 
     {
-        if (STATE_CURRENT() == &StateDatabaseEdit)
+        if (GetStatePtr() == &StateDatabaseEdit)
         {
             size_t length;
 
@@ -237,7 +237,7 @@ void ScreenWaitForWork(void)
 void ScreenRenderCurrent(void)
 {
     const DatabaseContext *database = DbGetContext();
-    const StateType_t *currentState = STATE_CURRENT();
+    const StateType_t *currentState = GetStatePtr();
     UI_8 index;
     UI_8 column;
 
@@ -339,8 +339,8 @@ void ScreenRenderCurrent(void)
 
     case SCREEN_DATABASE_ERROR:
         printf("\n  02  数据库检查失败\n\n");
-        printf("  入口检查返回错误，自动匹配错误规则并进入本页。\n");
-        printf("  返回首页后按 E 关闭模拟故障，再尝试进入。\n");
+        printf("  数据库或单元格入口检查失败，已自动进入本页。\n");
+        printf("  返回首页后重试；若开启了模拟故障，先按 E 关闭。\n");
         printf("\n  操作  %s 返回首页\n", g_screen.inputIsConsole ? "Esc/C" : "C");
         break;
 

@@ -7,58 +7,58 @@
  * 1. 数据结构
  *=========================================================*/
 
-/* 范围迁移规则对应的触发值区间，包含两个端点 */
+/* 迁移表中范围条件对应的触发值区间，包含两个端点 */
 typedef struct TriggerRange_t
 {
     UI_16 min;
     UI_16 max;
 } TriggerRange_t;
 
-/* 后处理函数返回值传给目标状态的前处理函数；自动迁移时前处理返回下一轮触发值 */
+/* 迁移表项的后处理返回值传给目标状态表的前处理；自动迁移时，前处理返回下一轮触发值 */
 typedef UI_16 FUNC(UI_16);
 
-/* 状态类型前置声明 */
+/* 状态表类型前置声明 */
 typedef struct StateType_t StateType_t;
 
-/* 单条迁移规则 */
+/* 迁移表结构：每个表项保存迁移条件、后处理函数和目标状态表指针，多个表项组成数组 */
 typedef struct StateTable_t
 {
-    UI_16 trigger;                /* 匹配的触发值或范围标识 */
-    FUNC *onExit;                 /* 命中规则后、切换状态前执行的后处理函数 */
-    const StateType_t *nextState; /* 规则匹配后的目标状态 */
+    UI_16 trigger;                /* 迁移条件：触发值、范围标识或 STATE_ANY */
+    FUNC *onExit;                 /* 命中本表项后、切换状态表指针前执行的后处理函数 */
+    const StateType_t *nextState; /* 迁移条件匹配后的目标状态表指针 */
 } StateTable_t;
 
-/* 状态定义：前处理函数、自动迁移标志和该状态的迁移规则 */
+/* 状态表：保存前处理函数、自动迁移标志、迁移表条目数与数组指针、画面 ID */
 struct StateType_t
 {
-    FUNC *onEnter;             /* 进入该状态时执行的前处理函数 */
-    UI_8 autoRun : 2;          /* bit0=1：前处理返回值驱动自动迁移，且不入历史栈 */
-    UI_8 ruleCount : 6;        /* 迁移规则数量，最大 63 */
-    const StateTable_t *rules; /* 当前状态的迁移规则表 */
-    UI_16 screenId;            /* 画面 ID */
+    FUNC *onEnter;               /* 进入本状态表对应状态时执行的前处理函数 */
+    UI_8 autoFlg : 2;            /* bit0=1：前处理返回值驱动查询本表的迁移表，且本状态表不入栈 */
+    UI_8 transNum : 6;           /* 关联迁移表数组的条目数，最大 63 */
+    const StateTable_t *transTbl; /* 本状态表关联的迁移表数组指针 */
+    UI_16 screenId;              /* 画面 ID */
 };
 
 /* 引擎上下文 */
 typedef struct StateInfo
 {
     UI_16 trigger;            /* 当前触发值 */
-    const StateType_t *state; /* 当前状态 */
+    const StateType_t *state; /* 当前状态表指针 */
 } StateInfo;
 
-/* 状态迁移历史栈 */
+/* 状态迁移历史栈：保存状态表指针 */
 #define STATE_HISTORY_CAPACITY 25u
 #define STATE_HISTORY_MISSING ((UI_8)0xFFu) /* 历史中未找到 */
 
 typedef struct StateHistory_t
 {
-    const StateType_t *states[STATE_HISTORY_CAPACITY]; /* 历史状态，自动迁移状态不入栈 */
-    UI_8 size;                                        /* 有效条目数；栈顶下标为 size - 1 */
+    const StateType_t *states[STATE_HISTORY_CAPACITY]; /* 历史状态表指针；自动迁移状态表不入栈 */
+    UI_8 top;                                        /* 有效条目数；栈顶下标为 top - 1 */
 } StateHistory_t;
 
 /*=========================================================
  * 2. 全局实例
  *=========================================================*/
-extern StateInfo stateContext;
+extern StateInfo stateInfo;
 extern StateHistory_t stateHistory;
 
 /*=========================================================
@@ -66,30 +66,30 @@ extern StateHistory_t stateHistory;
  *
  * 默认标识只划定范围触发器区间的起点和终点；实际区间由工程侧提供
  * 的对照表 TriggerRanges 决定。接入工程时可在包含本头文件前
- * 重定义 STATE_RANGE_FIRST / STATE_RANGE_LAST。
+ * 重定义 STATE_RANGE_MIN / STATE_RANGE_MAX。
  *=========================================================*/
-#ifndef STATE_RANGE_FIRST
-#define STATE_RANGE_FIRST ((UI_16)0xF000u)
+#ifndef STATE_RANGE_MIN
+#define STATE_RANGE_MIN ((UI_16)0xF000u)
 #endif
 
-#ifndef STATE_RANGE_LAST
-#define STATE_RANGE_LAST ((UI_16)0xF003u)
+#ifndef STATE_RANGE_MAX
+#define STATE_RANGE_MAX ((UI_16)0xF003u)
 #endif
 
 #ifndef STATE_ANY
 #define STATE_ANY ((UI_16)0xFFFFu)
 #endif
 
-/* 范围对照表：由工程侧定义，下标为 trigger - STATE_RANGE_FIRST */
-extern const TriggerRange_t TriggerRanges[STATE_RANGE_LAST - STATE_RANGE_FIRST + 1u];
+/* 范围对照表：由工程侧定义，下标为 trigger - STATE_RANGE_MIN */
+extern const TriggerRange_t TriggerRanges[STATE_RANGE_MAX - STATE_RANGE_MIN + 1u];
 
 /*=========================================================
- * 4. 状态描述宏
+ * 4. 状态表访问与迁移表初始化宏
  *=========================================================*/
-#define STATE_SET_TRIGGER(t) (stateContext.trigger = (UI_16)(t))
-#define STATE_TRIGGER() ((UI_16)stateContext.trigger)
-#define STATE_CURRENT() (stateContext.state)
-#define STATE_RULES(tbl) (UI_8)(sizeof(tbl) / sizeof((tbl)[0])), (tbl)
+#define SetStateTrig(t) (stateInfo.trigger = t)
+#define GetStateTrig() ((UI_16)stateInfo.trigger)
+#define GetStatePtr() (stateInfo.state)
+#define ListOf(ruleArray) (UI_8)(sizeof(ruleArray) / sizeof((ruleArray)[0])), (ruleArray)
 
 /*=========================================================
  * 5. 引擎接口
@@ -99,6 +99,6 @@ void StateEngine(UI_16 keyCode);
 void StateEngineRecovery(void);
 UI_8 StateGetHistoryTop(void);
 
-BOOL StateFindTable(const StateTable_t **pTable, UI_8 *pRuleCount, UI_16 *pTrigger);
+BOOL StateFindTable(const StateTable_t **pTable, UI_8 *pTransCnt, UI_16 *pTrigger);
 
 #endif /* MAIN_STAT_H */

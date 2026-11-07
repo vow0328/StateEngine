@@ -7,13 +7,13 @@ int main(void)
 
     ScreenInit();
     StateEngineInit(&StateHome);
-    /* 初始化不入历史栈，自迁移一次以便选择页可以回退首页。 */
+    /* 初始化不入历史；准备事件经首页自动入口过渡后保存首页状态表指针。 */
     StateEngine(EVENT_HOME_READY);
     ScreenRenderCurrent();
 
     for (;;)
     {
-        if (STATE_CURRENT() == &StateDeleteWorking)
+        if (GetStatePtr() == &StateDeleteWorking)
         {
             ScreenWaitForWork();
             /* 示例模拟下一轮执行事件，实机应由调度器或设备产生。 */
